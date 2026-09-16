@@ -1017,7 +1017,407 @@ if (typeof pdfjsLib !== 'undefined') {
       <div class="card"><div class="empty">Select a report type and click Generate</div></div>
     </div>
   </div>
-</div></div>
+</div>
+</div>
+
+<!-- ══ RECEIVE INVENTORY PAGE ══════════════════════════════════════ -->
+<div id="page-receive" class="page">
+<div class="pb">
+  <div class="ph">
+    <h1>⬇ RECEIVE INVENTORY</h1>
+    <p>Upload a supplier invoice + receiving sheet · AI parses and reconciles both · confirm to post as Purchase transactions</p>
+  </div>
+  <div style="text-align:right;margin-bottom:16px">
+    <button class="btn bg btn-sm" onclick="rcvManageApiKey()" style="font-size:11px">
+      🔑 API Key Setup
+    </button>
+    <span id="rcv-key-status" style="font-size:10px;color:var(--t3);margin-left:8px;font-family:var(--font-mono)"></span>
+  <div style="display:none">
+  </div>
+
+  <!-- ── STEP INDICATOR ──────────────────────────────────────────── -->
+  <div id="rcv-steps" style="display:flex;gap:0;margin-bottom:24px;border:1px solid var(--b1);border-radius:8px;overflow:hidden">
+    <div class="rcv-step on" id="rcv-step-1" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;border-right:1px solid var(--b1);background:var(--bg2)">
+      <span style="color:var(--cyan)">01</span> &nbsp;UPLOAD DOCUMENTS
+    </div>
+    <div class="rcv-step" id="rcv-step-2" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;border-right:1px solid var(--b1);background:var(--bg3);color:var(--t3)">
+      <span>02</span> &nbsp;RECONCILE
+    </div>
+    <div class="rcv-step" id="rcv-step-3" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;background:var(--bg3);color:var(--t3)">
+      <span>03</span> &nbsp;CONFIRM &amp; POST
+    </div>
+  </div>
+
+  <!-- ══ STEP 1: UPLOAD ════════════════════════════════════════════ -->
+  <div id="rcv-panel-1">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+
+      <!-- Supplier Invoice -->
+      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color .15s"
+           id="rcv-inv-drop"
+           ondragover="rcvDragOver(event,'rcv-inv-drop')"
+           ondragleave="rcvDragLeave('rcv-inv-drop')"
+           ondrop="rcvDrop(event,'invoice')"
+           onclick="$('rcv-inv-file').click()">
+        <div style="font-size:32px;margin-bottom:10px">📄</div>
+        <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:6px">Supplier Invoice</div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:12px">PDF, image (JPG/PNG), or Excel · drag &amp; drop or click</div>
+        <div id="rcv-inv-name" style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);min-height:16px"></div>
+        <input type="file" id="rcv-inv-file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv" style="display:none" onchange="rcvFileSelect(event,'invoice')">
+      </div>
+
+      <!-- Receiving Sheet -->
+      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color .15s"
+           id="rcv-rec-drop"
+           ondragover="rcvDragOver(event,'rcv-rec-drop')"
+           ondragleave="rcvDragLeave('rcv-rec-drop')"
+           ondrop="rcvDrop(event,'receiving')"
+           onclick="$('rcv-rec-file').click()">
+        <div style="font-size:32px;margin-bottom:10px">📋</div>
+        <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:6px">Receiving Sheet</div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:12px">Same formats supported · your team's count of what arrived</div>
+        <div id="rcv-rec-name" style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);min-height:16px"></div>
+        <input type="file" id="rcv-rec-file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv" style="display:none" onchange="rcvFileSelect(event,'receiving')">
+      </div>
+    </div>
+
+    <!-- Supplier + Order info -->
+    <div class="card" style="padding:18px 20px;margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:14px">ORDER DETAILS (pre-fill or leave blank for AI to detect)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+        <div class="fg">
+          <label>Supplier Name</label>
+          <input id="rcv-supplier" placeholder="Will be detected from invoice">
+        </div>
+        <div class="fg">
+          <label>Order / Invoice #</label>
+          <input id="rcv-order" placeholder="Will be detected from invoice">
+        </div>
+        <div class="fg">
+          <label>Invoice Date</label>
+          <input type="date" id="rcv-date">
+        </div>
+      </div>
+    </div>
+
+    <!-- Parse button -->
+    <div style="text-align:center">
+      <button class="btn bp" id="rcv-parse-btn" onclick="rcvParse()" style="padding:12px 36px;font-size:14px;letter-spacing:.5px">
+        🤖 Parse &amp; Reconcile Documents
+      </button>
+      <div style="font-size:11px;color:var(--t3);margin-top:10px">AI reads both documents, extracts line items, and compares them automatically</div>
+    </div>
+  </div>
+
+  <!-- ══ STEP 2: RECONCILE ══════════════════════════════════════════ -->
+  <div id="rcv-panel-2" style="display:none">
+
+    <!-- Summary bar -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="rcv-summary-bar"></div>
+
+    <!-- Reconciliation table -->
+    <div class="card" style="padding:0;margin-bottom:20px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:var(--font-mono)">RECONCILIATION TABLE</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn bg btn-sm" onclick="rcvAcceptAll()">✓ Accept All Matched</button>
+          <button class="btn bg btn-sm" onclick="rcvAddRow()">+ Add Row</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr>
+              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)" title="Include in purchase posting">✓</th>
+              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">DESCRIPTION <span style="font-weight:400;opacity:.6">(editable)</span></th>
+              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">PRODUCT ID <span style="font-weight:400;opacity:.6">(editable)</span></th>
+              <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">INV QTY <span style="font-weight:400;opacity:.6">(editable)</span></th>
+              <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">REC QTY <span style="font-weight:400;opacity:.6">(editable)</span></th>
+              <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">POST QTY ★</th>
+              <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">UNIT PRICE <span style="font-weight:400;opacity:.6">(editable)</span></th>
+              <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">TOTAL</th>
+              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">NOTES <span style="font-weight:400;opacity:.6">(editable)</span></th>
+              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">STATUS</th>
+            </tr>
+          </thead>
+          <tbody id="rcv-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Notes / issues panel -->
+    <div id="rcv-issues" style="display:none;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:7px;padding:14px 16px;margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--amber);font-family:var(--font-mono);margin-bottom:8px">⚠ DISCREPANCIES FOUND</div>
+      <div id="rcv-issues-list" style="font-size:12px;color:var(--t2);line-height:1.8"></div>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="btn bg" onclick="rcvReset()">← Start Over</button>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div style="font-size:11px;color:var(--t3)" id="rcv-selected-count"></div>
+        <button class="btn bp" onclick="rcvGoConfirm()" style="padding:11px 28px">Review &amp; Confirm →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ STEP 3: CONFIRM & POST ════════════════════════════════════ -->
+  <div id="rcv-panel-3" style="display:none">
+
+    <!-- Order summary -->
+    <div class="card" style="padding:18px 20px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:14px">ORDER SUMMARY — CONFIRM BEFORE POSTING</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+        <div class="fg">
+          <label>Supplier</label>
+          <input id="rcv-final-supplier">
+        </div>
+        <div class="fg">
+          <label>Order / Invoice #</label>
+          <input id="rcv-final-order">
+        </div>
+        <div class="fg">
+          <label>Date</label>
+          <input type="date" id="rcv-final-date">
+        </div>
+      </div>
+    </div>
+
+    <!-- Final items to post -->
+    <div class="card" style="padding:0;margin-bottom:20px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--b1)">
+        <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:var(--font-mono)">ITEMS TO POST AS PURCHASE TRANSACTIONS</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">PRODUCT ID</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">DESCRIPTION</th>
+            <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">QTY</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">UNIT PRICE</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">LINE TOTAL</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">NOTES</th>
+          </tr>
+        </thead>
+        <tbody id="rcv-confirm-body"></tbody>
+      </table>
+      <div style="padding:12px 18px;border-top:1px solid var(--b1);display:flex;justify-content:flex-end;gap:24px">
+        <div style="font-size:12px;color:var(--t3)">Items: <strong id="rcv-total-items" style="color:var(--t1)">0</strong></div>
+        <div style="font-size:12px;color:var(--t3)">Total Units: <strong id="rcv-total-units" style="color:var(--t1)">0</strong></div>
+        <div style="font-size:12px;color:var(--t3)">Total Value: <strong id="rcv-total-value" style="color:var(--cyan)">$0.00</strong></div>
+      </div>
+    </div>
+
+    <!-- Post button -->
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="btn bg" onclick="rcvGoStep(2)">← Back to Reconcile</button>
+      <div style="display:flex;gap:10px">
+        <button class="btn bg" onclick="rcvReset()">✕ Cancel</button>
+        <button class="btn bs" id="rcv-post-btn" onclick="rcvPost()" style="padding:12px 32px;font-size:14px">
+          ✓ Post All as Purchases
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI parsing in progress overlay -->
+  <div id="rcv-loading" style="display:none;text-align:center;padding:48px 20px">
+    <div style="width:40px;height:40px;border:3px solid var(--bg4);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px"></div>
+    <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px" id="rcv-loading-msg">🤖 Parsing documents…</div>
+    <div style="font-size:12px;color:var(--t3)">AI is reading your invoice and receiving sheet — usually takes 10–20 seconds</div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<!-- ══ OPEN BOX DEALS PAGE ════════════════════════════════════════ -->
+<div id="page-openbox" class="page">
+<div class="pb">
+  <div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1>📦 OPEN BOX DEALS</h1>
+      <p>Track leftover and open-box items sold on Facebook, eBay, and other platforms</p>
+    </div>
+    <button class="btn bs" onclick="obOpenAdd()" style="white-space:nowrap">+ Add Item</button>
+  </div>
+
+  <!-- KPI row -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+    <div class="card" id="ob-kpi-listed" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','')">
+      <div style="font-size:22px;font-weight:800;color:var(--t1)" id="ob-k-total">0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">TOTAL ITEMS</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','available')">
+      <div style="font-size:22px;font-weight:800;color:var(--cyan)" id="ob-k-avail">0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">AVAILABLE</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','sold')">
+      <div style="font-size:22px;font-weight:800;color:var(--green)" id="ob-k-sold">0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">SOLD</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:var(--green)" id="ob-k-revenue">$0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">TOTAL REVENUE</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bar" style="margin-bottom:16px">
+    <input id="ob-q" placeholder="Search items…" oninput="renderOpenBox()" style="flex:1;min-width:160px">
+    <select id="ob-f-status" onchange="renderOpenBox()">
+      <option value="">All Status</option>
+      <option value="available">Available</option>
+      <option value="sold">Sold</option>
+    </select>
+    <select id="ob-f-platform" onchange="renderOpenBox()">
+      <option value="">All Platforms</option>
+      <option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option>
+    </select>
+    <button class="btn bg btn-sm" onclick="obExportCSV()">⬇ Export</button>
+  </div>
+
+  <!-- Table -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">ITEM</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">CONDITION</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">LISTED ON</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">MIN PRICE</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">ASK PRICE</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">SOLD FOR</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">SOLD ON</th>
+            <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">STATUS</th>
+            <th style="padding:9px 12px;background:var(--bg3)"></th>
+          </tr>
+        </thead>
+        <tbody id="ob-tbody"></tbody>
+      </table>
+    </div>
+    <div id="ob-empty" style="display:none;text-align:center;padding:48px 20px;color:var(--t3)">
+      <div style="font-size:32px;margin-bottom:12px">📦</div>
+      <div style="font-size:14px;font-weight:600;color:var(--t2);margin-bottom:6px">No open box items yet</div>
+      <div style="font-size:12px;margin-bottom:16px">Add leftover items to track their minimum price and sale outcome</div>
+      <button class="btn bs" onclick="obOpenAdd()">+ Add First Item</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /#app -->
+
+
+<!-- ══ ADD / EDIT OPEN BOX MODAL ══════════════════════════════════ -->
+<div class="overlay" id="ob-add-ov">
+  <div class="modal" style="max-width:560px">
+    <div class="mh">
+      <div>
+        <div class="mt" id="ob-add-title">ADD OPEN BOX ITEM</div>
+        <div class="ms">Enter item details and minimum acceptable sale price</div>
+      </div>
+      <button class="mx" onclick="closeOv('ob-add-ov')">✕</button>
+    </div>
+    <div class="mb">
+      <input type="hidden" id="ob-edit-id">
+      <div class="fgrid" style="margin-bottom:12px">
+        <div class="fg" style="grid-column:1/-1">
+          <label>Item Name / Description *</label>
+          <input id="ob-name" placeholder="e.g. iPhone 14 Pro 256GB Space Black — cracked bezel">
+        </div>
+        <div class="fg">
+          <label>SKU / Product ID</label>
+          <input id="ob-sku" placeholder="Optional">
+        </div>
+        <div class="fg">
+          <label>Condition</label>
+          <select id="ob-cond"><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option><option>For Parts</option></select>
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+          <label>Condition Notes</label>
+          <input id="ob-cond-notes" placeholder="e.g. Missing charger, small crack bottom-left corner">
+        </div>
+      </div>
+      <div class="fgrid2" style="margin-bottom:12px">
+        <div class="fg">
+          <label>Minimum Sale Price *</label>
+          <input type="number" id="ob-min" placeholder="0.00" min="0" step="0.01">
+          <div class="hint">Lowest you'll accept</div>
+        </div>
+        <div class="fg">
+          <label>Asking Price</label>
+          <input type="number" id="ob-ask" placeholder="0.00" min="0" step="0.01">
+          <div class="hint">What you're listing it for</div>
+        </div>
+      </div>
+      <div class="fgrid2" style="margin-bottom:12px">
+        <div class="fg">
+          <label>Listed Platform(s)</label>
+          <input id="ob-platform" placeholder="Facebook Marketplace, eBay…" list="ob-platform-dl">
+          <datalist id="ob-platform-dl"><option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option></datalist>
+        </div>
+        <div class="fg">
+          <label>Date Added</label>
+          <input type="date" id="ob-date">
+        </div>
+      </div>
+      <div class="fg">
+        <label>Notes</label>
+        <textarea id="ob-notes" rows="2" style="resize:vertical;background:var(--bg3);border:1px solid var(--b1);border-radius:5px;padding:8px 11px;color:var(--t1);font-size:13px;outline:none;font-family:var(--font-sans);width:100%" placeholder="Any additional notes…"></textarea>
+      </div>
+    </div>
+    <div class="mf mf2">
+      <button class="btn bd btn-sm" id="ob-delete-btn" onclick="obDeleteItem()" style="display:none">✕ Delete</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn bg" onclick="closeOv('ob-add-ov')">Cancel</button>
+        <button class="btn bs" onclick="obSaveItem()">✓ Save Item</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MARK AS SOLD MODAL ══════════════════════════════════════════ -->
+<div class="overlay" id="ob-sold-ov">
+  <div class="modal" style="max-width:420px">
+    <div class="mh">
+      <div>
+        <div class="mt">✓ MARK AS SOLD</div>
+        <div class="ms" id="ob-sold-item-name">Item name</div>
+      </div>
+      <button class="mx" onclick="closeOv('ob-sold-ov')">✕</button>
+    </div>
+    <div class="mb">
+      <input type="hidden" id="ob-sold-id">
+      <div class="fgrid2" style="margin-bottom:14px">
+        <div class="fg">
+          <label>Actual Sale Price *</label>
+          <input type="number" id="ob-sold-price" placeholder="0.00" min="0" step="0.01">
+        </div>
+        <div class="fg">
+          <label>Date Sold</label>
+          <input type="date" id="ob-sold-date">
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:14px">
+        <label>Sold On Platform *</label>
+        <select id="ob-sold-platform">
+          <option value="">— Select platform —</option>
+          <option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Buyer Notes (optional)</label>
+        <input id="ob-sold-notes" placeholder="e.g. Local pickup, paid cash">
+      </div>
+      <div id="ob-sold-margin" style="margin-top:14px;padding:10px 14px;border-radius:6px;font-size:12px;display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:var(--green)"></div>
+    </div>
+    <div class="mf mf2">
+      <button class="btn bg" onclick="closeOv('ob-sold-ov')">Cancel</button>
+      <button class="btn bs" onclick="obConfirmSold()" style="background:#0b6b7a;border-color:#0b6b7a">✓ Confirm Sale</button>
+    </div>
+  </div>
+</div>
 
 </div><!-- /app -->
 
@@ -4815,401 +5215,6 @@ window.addEventListener('load', () => {
         </div>
       </div>
 
-    </div>
-  </div>
-
-<!-- ══ RECEIVE INVENTORY PAGE ══════════════════════════════════════ -->
-<div id="page-receive" class="page">
-<div class="pb">
-  <!-- Single compact header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-    <div>
-      <div style="font-size:13px;font-weight:700;color:var(--t1);font-family:var(--font-mono);letter-spacing:.5px">📦 RECEIVE INVENTORY</div>
-      <div style="font-size:11px;color:var(--t3);margin-top:2px">Upload invoice + receiving sheet · AI reconciles · post as Purchase</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <span id="rcv-key-status" style="font-size:10px;font-family:var(--font-mono)"></span>
-      <button class="btn bg btn-sm" onclick="rcvManageApiKey()" style="font-size:11px;white-space:nowrap">🔑 API Key</button>
-    </div>
-  </div>
-
-  <!-- ── STEP INDICATOR ──────────────────────────────────────────── -->
-  <div id="rcv-steps" style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--b1);border-radius:8px;overflow:hidden">
-    <div class="rcv-step on" id="rcv-step-1" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;border-right:1px solid var(--b1);background:var(--bg2)">
-      <span style="color:var(--cyan)">01</span> &nbsp;UPLOAD DOCUMENTS
-    </div>
-    <div class="rcv-step" id="rcv-step-2" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;border-right:1px solid var(--b1);background:var(--bg3);color:var(--t3)">
-      <span>02</span> &nbsp;RECONCILE
-    </div>
-    <div class="rcv-step" id="rcv-step-3" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;background:var(--bg3);color:var(--t3)">
-      <span>03</span> &nbsp;CONFIRM &amp; POST
-    </div>
-  </div>
-
-  <!-- ══ STEP 1: UPLOAD ════════════════════════════════════════════ -->
-  <div id="rcv-panel-1">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-
-      <!-- Supplier Invoice -->
-      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:18px;text-align:center;cursor:pointer;transition:border-color .15s"
-           id="rcv-inv-drop"
-           ondragover="rcvDragOver(event,'rcv-inv-drop')"
-           ondragleave="rcvDragLeave('rcv-inv-drop')"
-           ondrop="rcvDrop(event,'invoice')"
-           onclick="$('rcv-inv-file').click()">
-        <div style="font-size:32px;margin-bottom:10px">📄</div>
-        <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:6px">Supplier Invoice</div>
-        <div style="font-size:11px;color:var(--t3);margin-bottom:12px">PDF, image (JPG/PNG), or Excel · drag &amp; drop or click</div>
-        <div id="rcv-inv-name" style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);min-height:16px"></div>
-        <input type="file" id="rcv-inv-file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv" style="display:none" onchange="rcvFileSelect(event,'invoice')">
-      </div>
-
-      <!-- Receiving Sheet -->
-      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:18px;text-align:center;cursor:pointer;transition:border-color .15s"
-           id="rcv-rec-drop"
-           ondragover="rcvDragOver(event,'rcv-rec-drop')"
-           ondragleave="rcvDragLeave('rcv-rec-drop')"
-           ondrop="rcvDrop(event,'receiving')"
-           onclick="$('rcv-rec-file').click()">
-        <div style="font-size:32px;margin-bottom:10px">📋</div>
-        <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:6px">Receiving Sheet</div>
-        <div style="font-size:11px;color:var(--t3);margin-bottom:12px">Same formats supported · your team's count of what arrived</div>
-        <div id="rcv-rec-name" style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);min-height:16px"></div>
-        <input type="file" id="rcv-rec-file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv" style="display:none" onchange="rcvFileSelect(event,'receiving')">
-      </div>
-    </div>
-
-    <!-- Supplier + Order info -->
-    <div class="card" style="padding:18px 20px;margin-bottom:20px;border:1px solid var(--b1)">
-      <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:14px">ORDER DETAILS (pre-fill or leave blank for AI to detect)</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
-        <div class="fg">
-          <label>Supplier Name</label>
-          <input id="rcv-supplier" placeholder="Will be detected from invoice">
-        </div>
-        <div class="fg">
-          <label>Order / Invoice #</label>
-          <input id="rcv-order" placeholder="Will be detected from invoice">
-        </div>
-        <div class="fg">
-          <label>Invoice Date</label>
-          <input type="date" id="rcv-date">
-        </div>
-      </div>
-    </div>
-
-    <!-- Parse button -->
-    <div style="text-align:center">
-      <button class="btn bp" id="rcv-parse-btn" onclick="rcvParse()" style="padding:12px 36px;font-size:14px;letter-spacing:.5px">
-        🤖 Parse &amp; Reconcile Documents
-      </button>
-      <div style="font-size:11px;color:var(--t3);margin-top:10px">AI reads both documents, extracts line items, and compares them automatically</div>
-    </div>
-  </div>
-
-  <!-- ══ STEP 2: RECONCILE ══════════════════════════════════════════ -->
-  <div id="rcv-panel-2" style="display:none">
-
-    <!-- Summary bar -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="rcv-summary-bar"></div>
-
-    <!-- Reconciliation table -->
-    <div class="card" style="padding:0;margin-bottom:20px;overflow:hidden">
-      <div style="padding:14px 18px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:var(--font-mono)">RECONCILIATION TABLE</div>
-        <div style="display:flex;gap:8px">
-          <button class="btn bg btn-sm" onclick="rcvAcceptAll()">✓ Accept All Matched</button>
-          <button class="btn bg btn-sm" onclick="rcvAddRow()">+ Add Row</button>
-        </div>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead>
-            <tr>
-              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)" title="Include in purchase posting">✓</th>
-              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">DESCRIPTION <span style="font-weight:400;opacity:.6">(editable)</span></th>
-              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">PRODUCT ID <span style="font-weight:400;opacity:.6">(editable)</span></th>
-              <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">INV QTY <span style="font-weight:400;opacity:.6">(editable)</span></th>
-              <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">REC QTY <span style="font-weight:400;opacity:.6">(editable)</span></th>
-              <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">POST QTY ★</th>
-              <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">UNIT PRICE <span style="font-weight:400;opacity:.6">(editable)</span></th>
-              <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">TOTAL</th>
-              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">NOTES <span style="font-weight:400;opacity:.6">(editable)</span></th>
-              <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">STATUS</th>
-            </tr>
-          </thead>
-          <tbody id="rcv-table-body"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Notes / issues panel -->
-    <div id="rcv-issues" style="display:none;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:7px;padding:14px 16px;margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;color:var(--amber);font-family:var(--font-mono);margin-bottom:8px">⚠ DISCREPANCIES FOUND</div>
-      <div id="rcv-issues-list" style="font-size:12px;color:var(--t2);line-height:1.8"></div>
-    </div>
-
-    <!-- Action buttons -->
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <button class="btn bg" onclick="rcvReset()">← Start Over</button>
-      <div style="display:flex;gap:10px;align-items:center">
-        <div style="font-size:11px;color:var(--t3)" id="rcv-selected-count"></div>
-        <button class="btn bp" onclick="rcvGoConfirm()" style="padding:11px 28px">Review &amp; Confirm →</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ STEP 3: CONFIRM & POST ════════════════════════════════════ -->
-  <div id="rcv-panel-3" style="display:none">
-
-    <!-- Order summary -->
-    <div class="card" style="padding:18px 20px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:14px">ORDER SUMMARY — CONFIRM BEFORE POSTING</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
-        <div class="fg">
-          <label>Supplier</label>
-          <input id="rcv-final-supplier">
-        </div>
-        <div class="fg">
-          <label>Order / Invoice #</label>
-          <input id="rcv-final-order">
-        </div>
-        <div class="fg">
-          <label>Date</label>
-          <input type="date" id="rcv-final-date">
-        </div>
-      </div>
-    </div>
-
-    <!-- Final items to post -->
-    <div class="card" style="padding:0;margin-bottom:20px;overflow:hidden">
-      <div style="padding:14px 18px;border-bottom:1px solid var(--b1)">
-        <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:var(--font-mono)">ITEMS TO POST AS PURCHASE TRANSACTIONS</div>
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead>
-          <tr>
-            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">PRODUCT ID</th>
-            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">DESCRIPTION</th>
-            <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">QTY</th>
-            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">UNIT PRICE</th>
-            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">LINE TOTAL</th>
-            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">NOTES</th>
-          </tr>
-        </thead>
-        <tbody id="rcv-confirm-body"></tbody>
-      </table>
-      <div style="padding:12px 18px;border-top:1px solid var(--b1);display:flex;justify-content:flex-end;gap:24px">
-        <div style="font-size:12px;color:var(--t3)">Items: <strong id="rcv-total-items" style="color:var(--t1)">0</strong></div>
-        <div style="font-size:12px;color:var(--t3)">Total Units: <strong id="rcv-total-units" style="color:var(--t1)">0</strong></div>
-        <div style="font-size:12px;color:var(--t3)">Total Value: <strong id="rcv-total-value" style="color:var(--cyan)">$0.00</strong></div>
-      </div>
-    </div>
-
-    <!-- Post button -->
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <button class="btn bg" onclick="rcvGoStep(2)">← Back to Reconcile</button>
-      <div style="display:flex;gap:10px">
-        <button class="btn bg" onclick="rcvReset()">✕ Cancel</button>
-        <button class="btn bs" id="rcv-post-btn" onclick="rcvPost()" style="padding:12px 32px;font-size:14px">
-          ✓ Post All as Purchases
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- AI parsing in progress overlay -->
-  <div id="rcv-loading" style="display:none;text-align:center;padding:48px 20px;max-width:700px;margin:0 auto">
-    <div style="width:40px;height:40px;border:3px solid var(--bg4);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px"></div>
-    <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px" id="rcv-loading-msg">🤖 Parsing documents…</div>
-    <div style="font-size:12px;color:var(--t3)">AI is reading your invoice and receiving sheet — usually takes 10–20 seconds</div>
-  </div>
-
-</div>
-</div>
-
-<!-- ══ OPEN BOX DEALS PAGE ════════════════════════════════════════ -->
-<div id="page-openbox" class="page">
-<div class="pb">
-  <div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-    <div>
-      <h1>📦 OPEN BOX DEALS</h1>
-      <p>Track leftover and open-box items sold on Facebook, eBay, and other platforms</p>
-    </div>
-    <button class="btn bs" onclick="obOpenAdd()" style="white-space:nowrap">+ Add Item</button>
-  </div>
-
-  <!-- KPI row -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
-    <div class="card" id="ob-kpi-listed" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','')">
-      <div style="font-size:22px;font-weight:800;color:var(--t1)" id="ob-k-total">0</div>
-      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">TOTAL ITEMS</div>
-    </div>
-    <div class="card" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','available')">
-      <div style="font-size:22px;font-weight:800;color:var(--cyan)" id="ob-k-avail">0</div>
-      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">AVAILABLE</div>
-    </div>
-    <div class="card" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','sold')">
-      <div style="font-size:22px;font-weight:800;color:var(--green)" id="ob-k-sold">0</div>
-      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">SOLD</div>
-    </div>
-    <div class="card" style="padding:14px;text-align:center">
-      <div style="font-size:22px;font-weight:800;color:var(--green)" id="ob-k-revenue">$0</div>
-      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">TOTAL REVENUE</div>
-    </div>
-  </div>
-
-  <!-- Filters -->
-  <div class="bar" style="margin-bottom:16px">
-    <input id="ob-q" placeholder="Search items…" oninput="renderOpenBox()" style="flex:1;min-width:160px">
-    <select id="ob-f-status" onchange="renderOpenBox()">
-      <option value="">All Status</option>
-      <option value="available">Available</option>
-      <option value="sold">Sold</option>
-    </select>
-    <select id="ob-f-platform" onchange="renderOpenBox()">
-      <option value="">All Platforms</option>
-      <option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option>
-    </select>
-    <button class="btn bg btn-sm" onclick="obExportCSV()">⬇ Export</button>
-  </div>
-
-  <!-- Table -->
-  <div class="card" style="padding:0;overflow:hidden">
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead>
-          <tr>
-            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">ITEM</th>
-            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">CONDITION</th>
-            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">LISTED ON</th>
-            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">MIN PRICE</th>
-            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">ASK PRICE</th>
-            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">SOLD FOR</th>
-            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">SOLD ON</th>
-            <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">STATUS</th>
-            <th style="padding:9px 12px;background:var(--bg3)"></th>
-          </tr>
-        </thead>
-        <tbody id="ob-tbody"></tbody>
-      </table>
-    </div>
-    <div id="ob-empty" style="display:none;text-align:center;padding:48px 20px;color:var(--t3)">
-      <div style="font-size:32px;margin-bottom:12px">📦</div>
-      <div style="font-size:14px;font-weight:600;color:var(--t2);margin-bottom:6px">No open box items yet</div>
-      <div style="font-size:12px;margin-bottom:16px">Add leftover items to track their minimum price and sale outcome</div>
-      <button class="btn bs" onclick="obOpenAdd()">+ Add First Item</button>
-    </div>
-  </div>
-</div>
-</div>
-
-<!-- ══ ADD / EDIT OPEN BOX MODAL ══════════════════════════════════ -->
-<div class="overlay" id="ob-add-ov">
-  <div class="modal" style="max-width:560px">
-    <div class="mh">
-      <div>
-        <div class="mt" id="ob-add-title">ADD OPEN BOX ITEM</div>
-        <div class="ms">Enter item details and minimum acceptable sale price</div>
-      </div>
-      <button class="mx" onclick="closeOv('ob-add-ov')">✕</button>
-    </div>
-    <div class="mb">
-      <input type="hidden" id="ob-edit-id">
-      <div class="fgrid" style="margin-bottom:12px">
-        <div class="fg" style="grid-column:1/-1">
-          <label>Item Name / Description *</label>
-          <input id="ob-name" placeholder="e.g. iPhone 14 Pro 256GB Space Black — cracked bezel">
-        </div>
-        <div class="fg">
-          <label>SKU / Product ID</label>
-          <input id="ob-sku" placeholder="Optional">
-        </div>
-        <div class="fg">
-          <label>Condition</label>
-          <select id="ob-cond"><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option><option>For Parts</option></select>
-        </div>
-        <div class="fg" style="grid-column:1/-1">
-          <label>Condition Notes</label>
-          <input id="ob-cond-notes" placeholder="e.g. Missing charger, small crack bottom-left corner">
-        </div>
-      </div>
-      <div class="fgrid2" style="margin-bottom:12px">
-        <div class="fg">
-          <label>Minimum Sale Price *</label>
-          <input type="number" id="ob-min" placeholder="0.00" min="0" step="0.01">
-          <div class="hint">Lowest you'll accept</div>
-        </div>
-        <div class="fg">
-          <label>Asking Price</label>
-          <input type="number" id="ob-ask" placeholder="0.00" min="0" step="0.01">
-          <div class="hint">What you're listing it for</div>
-        </div>
-      </div>
-      <div class="fgrid2" style="margin-bottom:12px">
-        <div class="fg">
-          <label>Listed Platform(s)</label>
-          <input id="ob-platform" placeholder="Facebook Marketplace, eBay…" list="ob-platform-dl">
-          <datalist id="ob-platform-dl"><option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option></datalist>
-        </div>
-        <div class="fg">
-          <label>Date Added</label>
-          <input type="date" id="ob-date">
-        </div>
-      </div>
-      <div class="fg">
-        <label>Notes</label>
-        <textarea id="ob-notes" rows="2" style="resize:vertical;background:var(--bg3);border:1px solid var(--b1);border-radius:5px;padding:8px 11px;color:var(--t1);font-size:13px;outline:none;font-family:var(--font-sans);width:100%" placeholder="Any additional notes…"></textarea>
-      </div>
-    </div>
-    <div class="mf mf2">
-      <button class="btn bd btn-sm" id="ob-delete-btn" onclick="obDeleteItem()" style="display:none">✕ Delete</button>
-      <div style="display:flex;gap:8px">
-        <button class="btn bg" onclick="closeOv('ob-add-ov')">Cancel</button>
-        <button class="btn bs" onclick="obSaveItem()">✓ Save Item</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ══ MARK AS SOLD MODAL ══════════════════════════════════════════ -->
-<div class="overlay" id="ob-sold-ov">
-  <div class="modal" style="max-width:420px">
-    <div class="mh">
-      <div>
-        <div class="mt">✓ MARK AS SOLD</div>
-        <div class="ms" id="ob-sold-item-name">Item name</div>
-      </div>
-      <button class="mx" onclick="closeOv('ob-sold-ov')">✕</button>
-    </div>
-    <div class="mb">
-      <input type="hidden" id="ob-sold-id">
-      <div class="fgrid2" style="margin-bottom:14px">
-        <div class="fg">
-          <label>Actual Sale Price *</label>
-          <input type="number" id="ob-sold-price" placeholder="0.00" min="0" step="0.01">
-        </div>
-        <div class="fg">
-          <label>Date Sold</label>
-          <input type="date" id="ob-sold-date">
-        </div>
-      </div>
-      <div class="fg" style="margin-bottom:14px">
-        <label>Sold On Platform *</label>
-        <select id="ob-sold-platform">
-          <option value="">— Select platform —</option>
-          <option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option>
-        </select>
-      </div>
-      <div class="fg">
-        <label>Buyer Notes (optional)</label>
-        <input id="ob-sold-notes" placeholder="e.g. Local pickup, paid cash">
-      </div>
-      <div id="ob-sold-margin" style="margin-top:14px;padding:10px 14px;border-radius:6px;font-size:12px;display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:var(--green)"></div>
-    </div>
-    <div class="mf mf2">
-      <button class="btn bg" onclick="closeOv('ob-sold-ov')">Cancel</button>
-      <button class="btn bs" onclick="obConfirmSold()" style="background:#0b6b7a;border-color:#0b6b7a">✓ Confirm Sale</button>
     </div>
   </div>
 </div>
