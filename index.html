@@ -4821,23 +4821,21 @@ window.addEventListener('load', () => {
 
 <!-- ══ RECEIVE INVENTORY PAGE ══════════════════════════════════════ -->
 <div id="page-receive" class="page">
-<div class="pb">
-  <div class="ph">
-    <h1>⬇ RECEIVE INVENTORY</h1>
-    <p>Upload a supplier invoice + receiving sheet · AI parses and reconciles both · confirm to post as Purchase transactions</p>
-  </div>
-  <!-- ── HEADER ROW: title + key status in one line ─────────────── -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span id="rcv-key-status" style="font-size:11px;font-family:var(--font-mono)"></span>
+<div class="pb" style="max-width:760px;margin:0 auto">
+  <!-- Single compact header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--t1);font-family:var(--font-mono);letter-spacing:.5px">📦 RECEIVE INVENTORY</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">Upload invoice + receiving sheet · AI reconciles · post as Purchase</div>
     </div>
-    <button class="btn bg btn-sm" onclick="rcvManageApiKey()" style="font-size:11px">
-      🔑 API Key Setup
-    </button>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="rcv-key-status" style="font-size:10px;font-family:var(--font-mono)"></span>
+      <button class="btn bg btn-sm" onclick="rcvManageApiKey()" style="font-size:11px;white-space:nowrap">🔑 API Key</button>
+    </div>
   </div>
 
   <!-- ── STEP INDICATOR ──────────────────────────────────────────── -->
-  <div id="rcv-steps" style="display:flex;gap:0;margin-bottom:24px;border:1px solid var(--b1);border-radius:8px;overflow:hidden;max-width:700px;margin-left:auto;margin-right:auto">
+  <div id="rcv-steps" style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--b1);border-radius:8px;overflow:hidden">
     <div class="rcv-step on" id="rcv-step-1" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;border-right:1px solid var(--b1);background:var(--bg2)">
       <span style="color:var(--cyan)">01</span> &nbsp;UPLOAD DOCUMENTS
     </div>
@@ -4850,11 +4848,11 @@ window.addEventListener('load', () => {
   </div>
 
   <!-- ══ STEP 1: UPLOAD ════════════════════════════════════════════ -->
-  <div id="rcv-panel-1" style="max-width:700px;margin:0 auto">
+  <div id="rcv-panel-1">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
 
       <!-- Supplier Invoice -->
-      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color .15s"
+      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:18px;text-align:center;cursor:pointer;transition:border-color .15s"
            id="rcv-inv-drop"
            ondragover="rcvDragOver(event,'rcv-inv-drop')"
            ondragleave="rcvDragLeave('rcv-inv-drop')"
@@ -4868,7 +4866,7 @@ window.addEventListener('load', () => {
       </div>
 
       <!-- Receiving Sheet -->
-      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color .15s"
+      <div class="card" style="border:2px dashed var(--b2);border-radius:8px;padding:18px;text-align:center;cursor:pointer;transition:border-color .15s"
            id="rcv-rec-drop"
            ondragover="rcvDragOver(event,'rcv-rec-drop')"
            ondragleave="rcvDragLeave('rcv-rec-drop')"
