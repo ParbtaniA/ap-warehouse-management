@@ -579,6 +579,7 @@ if (typeof pdfjsLib !== 'undefined') {
   <button class="nb" onclick="go('categories',this)">⊞ Categories</button>
   <button class="nb" onclick="go('reports',this)">▤ Reports</button>
   <button class="nb" onclick="go('receive',this)" style="border-left:1px solid var(--b2);margin-left:4px;padding-left:12px">⬇ Receive</button>
+  <button class="nb" onclick="go('openbox',this)" style="border-left:1px solid var(--b2);margin-left:4px;padding-left:12px">📦 Open Box</button>
   <div class="tb-end">
     <div id="user-pill" style="font-size:10px;color:var(--t3);font-family:var(--font-mono);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;display:none"></div>
     <div id="fs-status" style="font-size:10px;font-family:var(--font-mono);display:none;padding:3px 8px;border-radius:3px"></div>
@@ -1191,9 +1192,11 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err => {
 // ── Firestore document / collection refs ──────────────────────────
 const FS_CONFIG = db.collection('ap_wms').doc('config');
 const FS_TX     = db.collection('ap_wms').doc('config').collection('transactions');
+const FS_OB = db.collection('ap_wms').doc('config').collection('openbox');
 
 // ── In-memory state (loaded from Firestore on login) ──────────────
-let transactions  = [];
+let transactions = [];
+let openBoxItems  = [];   // Open Box Deals
 let suppliers     = [];
 let categories    = [];
 let upcMap        = {};
@@ -1332,6 +1335,7 @@ async function loadFromFirestore() {
 
     fsReady = true;
     setupRealtimeListeners();
+    obInit();
     console.log('Firestore loaded OK. Transactions:', transactions.length);
     const fsSt = $('fs-status');
     if(fsSt){
@@ -1558,7 +1562,7 @@ function upcTag(upc) {
 const RENDER = {
   dashboard: renderDash, products: renderProducts, transactions: renderTrans,
   upc: renderUpc, stock: renderStock, lookup: ()=>{},
-  suppliers: renderSuppliers, categories: renderCats, reports: initReports, receive: renderReceive
+  suppliers: renderSuppliers, categories: renderCats, reports: initReports, receive: renderReceive, openbox: renderOpenBox
 };
 
 function go(id, btn) {
@@ -4298,6 +4302,279 @@ function runDQScan() {
 function showDQIssues() { runDQScan(); openOv('dq-ov'); }
 function hideDQBanner() { const b=$('dq-banner'); if(b) b.style.display='none'; }
 
+// ═══════════════════════════════════════════════════════════════════
+// OPEN BOX DEALS — Firestore-backed deal tracker
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Firestore helpers ─────────────────────────────────────────────
+async function obSaveFS(item) {
+  return FS_OB.doc(String(item.id)).set(item);
+}
+async function obDeleteFS(id) {
+  return FS_OB.doc(String(id)).delete();
+}
+async function obLoadAll() {
+  const snap = await FS_OB.limit(2000).get();
+  openBoxItems = snap.docs.map(d => d.data());
+  openBoxItems.sort((a, b) => (b.id || 0) - (a.id || 0));
+}
+
+// Boot: load OB items when Firestore is ready
+function obInit() {
+  FS_OB.onSnapshot(snap => {
+    openBoxItems = snap.docs.map(d => d.data());
+    openBoxItems.sort((a, b) => (b.id || 0) - (a.id || 0));
+    if (activePage() === 'openbox') renderOpenBox();
+  });
+}
+
+// ── Render ────────────────────────────────────────────────────────
+function renderOpenBox() {
+  const q        = (gv('ob-q')         || '').toLowerCase();
+  const fStatus  = gv('ob-f-status')   || '';
+  const fPlatform= gv('ob-f-platform') || '';
+
+  let items = openBoxItems.filter(it => {
+    if (fStatus   && it.status !== fStatus)                         return false;
+    if (fPlatform && !(it.platform || '').includes(fPlatform) &&
+                     !(it.soldPlatform || '').includes(fPlatform))  return false;
+    if (q && !`${it.name} ${it.sku||''} ${it.condNotes||''} ${it.notes||''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // KPIs
+  const all      = openBoxItems;
+  const avail    = all.filter(i => i.status === 'available');
+  const sold     = all.filter(i => i.status === 'sold');
+  const revenue  = sold.reduce((s, i) => s + (Number(i.soldPrice) || 0), 0);
+  if ($('ob-k-total'))   $('ob-k-total').textContent  = all.length;
+  if ($('ob-k-avail'))   $('ob-k-avail').textContent  = avail.length;
+  if ($('ob-k-sold'))    $('ob-k-sold').textContent   = sold.length;
+  if ($('ob-k-revenue')) $('ob-k-revenue').textContent = '$' + revenue.toFixed(2);
+
+  const tbody = $('ob-tbody');
+  const empty = $('ob-empty');
+  if (!tbody) return;
+
+  if (!items.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  const BADGE = {
+    available: '<span style="background:rgba(14,165,233,.12);color:#0ea5e9;border:1px solid rgba(14,165,233,.25);padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;font-family:var(--font-mono)">AVAILABLE</span>',
+    sold:      '<span style="background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2);padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;font-family:var(--font-mono)">SOLD</span>',
+  };
+
+  tbody.innerHTML = items.map(it => {
+    const isSold = it.status === 'sold';
+    const margin = isSold && it.soldPrice && it.minPrice
+      ? (Number(it.soldPrice) - Number(it.minPrice))
+      : null;
+    const marginHtml = margin !== null
+      ? `<span style="font-size:10px;color:${margin >= 0 ? 'var(--green)' : 'var(--red)'}"> (${margin >= 0 ? '+' : ''}$${margin.toFixed(2)} vs min)</span>`
+      : '';
+
+    return `<tr style="border-bottom:1px solid var(--b1)${isSold ? ';opacity:.75' : ''}">
+      <td style="padding:10px 12px">
+        <div style="font-weight:600;color:var(--t1);font-size:12px">${it.name}</div>
+        ${it.sku ? `<div style="font-size:10px;color:var(--cyan);font-family:var(--font-mono);margin-top:2px">${it.sku}</div>` : ''}
+        ${it.condNotes ? `<div style="font-size:11px;color:var(--t3);margin-top:2px">${it.condNotes}</div>` : ''}
+      </td>
+      <td style="padding:10px 12px;font-size:11px;color:var(--t2)">${it.cond || '—'}</td>
+      <td style="padding:10px 12px;font-size:11px;color:var(--t2)">${it.platform || '—'}</td>
+      <td style="padding:10px 12px;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--amber)">$${Number(it.minPrice||0).toFixed(2)}</td>
+      <td style="padding:10px 12px;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--t2)">${it.askPrice ? '$'+Number(it.askPrice).toFixed(2) : '—'}</td>
+      <td style="padding:10px 12px;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--green)">
+        ${isSold ? '$'+Number(it.soldPrice||0).toFixed(2) + marginHtml : '—'}
+      </td>
+      <td style="padding:10px 12px;font-size:11px;color:var(--t2)">${isSold ? (it.soldPlatform||'—') : '—'}</td>
+      <td style="padding:10px 12px;text-align:center">${BADGE[it.status] || ''}</td>
+      <td style="padding:10px 12px">
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          ${!isSold ? `<button class="btn bs btn-sm" onclick="obOpenSold('${it.id}')" style="font-size:10px;padding:3px 8px">✓ Sold</button>` : ''}
+          <button class="btn bg btn-sm" onclick="obOpenEdit('${it.id}')" style="font-size:10px;padding:3px 8px">✎</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Filters ───────────────────────────────────────────────────────
+function obSetFilter(field, val) {
+  if (field === 'status') sv('ob-f-status', val);
+  renderOpenBox();
+}
+
+// ── Add / Edit modal ──────────────────────────────────────────────
+function obOpenAdd() {
+  sv('ob-edit-id', '');
+  sv('ob-name', ''); sv('ob-sku', '');
+  sv('ob-cond', 'Like New'); sv('ob-cond-notes', '');
+  sv('ob-min', ''); sv('ob-ask', '');
+  sv('ob-platform', '');
+  sv('ob-date', new Date().toISOString().split('T')[0]);
+  sv('ob-notes', '');
+  $('ob-add-title').textContent = 'ADD OPEN BOX ITEM';
+  const del = $('ob-delete-btn');
+  if (del) del.style.display = 'none';
+  openOv('ob-add-ov');
+  setTimeout(() => $('ob-name')?.focus(), 100);
+}
+
+function obOpenEdit(id) {
+  const it = openBoxItems.find(i => String(i.id) === String(id));
+  if (!it) return;
+  sv('ob-edit-id', it.id);
+  sv('ob-name',       it.name       || '');
+  sv('ob-sku',        it.sku        || '');
+  sv('ob-cond',       it.cond       || 'Like New');
+  sv('ob-cond-notes', it.condNotes  || '');
+  sv('ob-min',        it.minPrice   || '');
+  sv('ob-ask',        it.askPrice   || '');
+  sv('ob-platform',   it.platform   || '');
+  sv('ob-date',       it.dateAdded  || '');
+  sv('ob-notes',      it.notes      || '');
+  $('ob-add-title').textContent = 'EDIT OPEN BOX ITEM';
+  const del = $('ob-delete-btn');
+  if (del) del.style.display = it.status !== 'sold' ? 'inline-flex' : 'none';
+  openOv('ob-add-ov');
+}
+
+async function obSaveItem() {
+  const name = gv('ob-name').trim();
+  if (!name) { toast('Item name is required', false, 'err'); return; }
+  const minP = parseFloat(gv('ob-min'));
+  if (!minP || minP <= 0) { toast('Minimum sale price is required', false, 'err'); return; }
+
+  const editId = gv('ob-edit-id');
+  const existing = editId ? openBoxItems.find(i => String(i.id) === String(editId)) : null;
+
+  const item = {
+    id:         existing ? existing.id : Date.now(),
+    name,
+    sku:        gv('ob-sku').trim(),
+    cond:       gv('ob-cond'),
+    condNotes:  gv('ob-cond-notes').trim(),
+    minPrice:   minP,
+    askPrice:   parseFloat(gv('ob-ask'))  || '',
+    platform:   gv('ob-platform').trim(),
+    dateAdded:  gv('ob-date') || new Date().toISOString().split('T')[0],
+    notes:      gv('ob-notes').trim(),
+    status:     existing ? existing.status      : 'available',
+    soldPrice:  existing ? (existing.soldPrice  || '') : '',
+    soldPlatform: existing ? (existing.soldPlatform || '') : '',
+    soldDate:   existing ? (existing.soldDate   || '') : '',
+    soldNotes:  existing ? (existing.soldNotes  || '') : '',
+  };
+
+  // Update local state
+  if (existing) {
+    const idx = openBoxItems.findIndex(i => String(i.id) === String(editId));
+    if (idx > -1) openBoxItems[idx] = item;
+  } else {
+    openBoxItems.unshift(item);
+  }
+
+  closeOv('ob-add-ov');
+  renderOpenBox();
+  toast('✓ Item saved', false, 'ok');
+  await obSaveFS(item);
+}
+
+async function obDeleteItem() {
+  const id = gv('ob-edit-id');
+  if (!id) return;
+  if (!confirm('Delete this open box item?')) return;
+  openBoxItems = openBoxItems.filter(i => String(i.id) !== String(id));
+  closeOv('ob-add-ov');
+  renderOpenBox();
+  toast('Item deleted', false, 'ok');
+  await obDeleteFS(id);
+}
+
+// ── Mark as Sold modal ────────────────────────────────────────────
+function obOpenSold(id) {
+  const it = openBoxItems.find(i => String(i.id) === String(id));
+  if (!it) return;
+  sv('ob-sold-id', id);
+  const nameEl = $('ob-sold-item-name');
+  if (nameEl) nameEl.textContent = it.name;
+  sv('ob-sold-price', it.askPrice || '');
+  sv('ob-sold-date',  new Date().toISOString().split('T')[0]);
+  sv('ob-sold-platform', '');
+  sv('ob-sold-notes', '');
+  const margin = $('ob-sold-margin');
+  if (margin) margin.style.display = 'none';
+  openOv('ob-sold-ov');
+
+  // Live margin calc
+  const priceInput = $('ob-sold-price');
+  if (priceInput) {
+    priceInput.oninput = () => {
+      const sp = parseFloat(priceInput.value) || 0;
+      const diff = sp - Number(it.minPrice || 0);
+      if (sp > 0 && margin) {
+        margin.style.display = 'block';
+        margin.style.background = diff >= 0 ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)';
+        margin.style.borderColor = diff >= 0 ? 'rgba(34,197,94,.2)' : 'rgba(239,68,68,.2)';
+        margin.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+        margin.innerHTML = diff >= 0
+          ? `✓ $${diff.toFixed(2)} above minimum price ($${Number(it.minPrice).toFixed(2)})`
+          : `⚠ $${Math.abs(diff).toFixed(2)} below minimum price ($${Number(it.minPrice).toFixed(2)})`;
+      } else if (margin) margin.style.display = 'none';
+    };
+  }
+}
+
+async function obConfirmSold() {
+  const id       = gv('ob-sold-id');
+  const price    = parseFloat(gv('ob-sold-price'));
+  const platform = gv('ob-sold-platform');
+  const date     = gv('ob-sold-date');
+  const notes    = gv('ob-sold-notes').trim();
+
+  if (!price || price <= 0) { toast('Sale price is required', false, 'err'); return; }
+  if (!platform)             { toast('Select the platform where it was sold', false, 'err'); return; }
+
+  const idx = openBoxItems.findIndex(i => String(i.id) === String(id));
+  if (idx === -1) return;
+
+  const updated = {
+    ...openBoxItems[idx],
+    status:       'sold',
+    soldPrice:    price,
+    soldPlatform: platform,
+    soldDate:     date,
+    soldNotes:    notes,
+  };
+  openBoxItems[idx] = updated;
+
+  closeOv('ob-sold-ov');
+  renderOpenBox();
+  toast(`✓ Marked as sold for $${price.toFixed(2)} on ${platform}`, false, 'ok');
+  await obSaveFS(updated);
+}
+
+// ── CSV Export ────────────────────────────────────────────────────
+function obExportCSV() {
+  const headers = ['Name','SKU','Condition','Condition Notes','Listed Platform','Min Price','Asking Price','Status','Sold Price','Sold Platform','Sold Date','Date Added','Notes'];
+  const rows = openBoxItems.map(it => [
+    it.name, it.sku||'', it.cond||'', it.condNotes||'',
+    it.platform||'', it.minPrice||'', it.askPrice||'',
+    it.status, it.soldPrice||'', it.soldPlatform||'', it.soldDate||'',
+    it.dateAdded||'', it.notes||''
+  ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'open-box-deals-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  toast('⬇ CSV exported', false, 'ok');
+}
+
 window.addEventListener('load', () => {
   // Auth state observer handles all init after login
 });
@@ -4751,6 +5028,193 @@ window.addEventListener('load', () => {
 
 </div>
 </div>
+
+<!-- ══ OPEN BOX DEALS PAGE ════════════════════════════════════════ -->
+<div id="page-openbox" class="page">
+<div class="pb">
+  <div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1>📦 OPEN BOX DEALS</h1>
+      <p>Track leftover and open-box items sold on Facebook, eBay, and other platforms</p>
+    </div>
+    <button class="btn bs" onclick="obOpenAdd()" style="white-space:nowrap">+ Add Item</button>
+  </div>
+
+  <!-- KPI row -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+    <div class="card" id="ob-kpi-listed" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','')">
+      <div style="font-size:22px;font-weight:800;color:var(--t1)" id="ob-k-total">0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">TOTAL ITEMS</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','available')">
+      <div style="font-size:22px;font-weight:800;color:var(--cyan)" id="ob-k-avail">0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">AVAILABLE</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center;cursor:pointer" onclick="obSetFilter('status','sold')">
+      <div style="font-size:22px;font-weight:800;color:var(--green)" id="ob-k-sold">0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">SOLD</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:var(--green)" id="ob-k-revenue">$0</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:4px">TOTAL REVENUE</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bar" style="margin-bottom:16px">
+    <input id="ob-q" placeholder="Search items…" oninput="renderOpenBox()" style="flex:1;min-width:160px">
+    <select id="ob-f-status" onchange="renderOpenBox()">
+      <option value="">All Status</option>
+      <option value="available">Available</option>
+      <option value="sold">Sold</option>
+    </select>
+    <select id="ob-f-platform" onchange="renderOpenBox()">
+      <option value="">All Platforms</option>
+      <option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option>
+    </select>
+    <button class="btn bg btn-sm" onclick="obExportCSV()">⬇ Export</button>
+  </div>
+
+  <!-- Table -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">ITEM</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">CONDITION</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">LISTED ON</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">MIN PRICE</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">ASK PRICE</th>
+            <th style="padding:9px 12px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">SOLD FOR</th>
+            <th style="padding:9px 12px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">SOLD ON</th>
+            <th style="padding:9px 12px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.7px;font-family:var(--font-mono)">STATUS</th>
+            <th style="padding:9px 12px;background:var(--bg3)"></th>
+          </tr>
+        </thead>
+        <tbody id="ob-tbody"></tbody>
+      </table>
+    </div>
+    <div id="ob-empty" style="display:none;text-align:center;padding:48px 20px;color:var(--t3)">
+      <div style="font-size:32px;margin-bottom:12px">📦</div>
+      <div style="font-size:14px;font-weight:600;color:var(--t2);margin-bottom:6px">No open box items yet</div>
+      <div style="font-size:12px;margin-bottom:16px">Add leftover items to track their minimum price and sale outcome</div>
+      <button class="btn bs" onclick="obOpenAdd()">+ Add First Item</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══ ADD / EDIT OPEN BOX MODAL ══════════════════════════════════ -->
+<div class="overlay" id="ob-add-ov">
+  <div class="modal" style="max-width:560px">
+    <div class="mh">
+      <div>
+        <div class="mt" id="ob-add-title">ADD OPEN BOX ITEM</div>
+        <div class="ms">Enter item details and minimum acceptable sale price</div>
+      </div>
+      <button class="mx" onclick="closeOv('ob-add-ov')">✕</button>
+    </div>
+    <div class="mb">
+      <input type="hidden" id="ob-edit-id">
+      <div class="fgrid" style="margin-bottom:12px">
+        <div class="fg" style="grid-column:1/-1">
+          <label>Item Name / Description *</label>
+          <input id="ob-name" placeholder="e.g. iPhone 14 Pro 256GB Space Black — cracked bezel">
+        </div>
+        <div class="fg">
+          <label>SKU / Product ID</label>
+          <input id="ob-sku" placeholder="Optional">
+        </div>
+        <div class="fg">
+          <label>Condition</label>
+          <select id="ob-cond"><option>Like New</option><option>Good</option><option>Fair</option><option>Poor</option><option>For Parts</option></select>
+        </div>
+        <div class="fg" style="grid-column:1/-1">
+          <label>Condition Notes</label>
+          <input id="ob-cond-notes" placeholder="e.g. Missing charger, small crack bottom-left corner">
+        </div>
+      </div>
+      <div class="fgrid2" style="margin-bottom:12px">
+        <div class="fg">
+          <label>Minimum Sale Price *</label>
+          <input type="number" id="ob-min" placeholder="0.00" min="0" step="0.01">
+          <div class="hint">Lowest you'll accept</div>
+        </div>
+        <div class="fg">
+          <label>Asking Price</label>
+          <input type="number" id="ob-ask" placeholder="0.00" min="0" step="0.01">
+          <div class="hint">What you're listing it for</div>
+        </div>
+      </div>
+      <div class="fgrid2" style="margin-bottom:12px">
+        <div class="fg">
+          <label>Listed Platform(s)</label>
+          <input id="ob-platform" placeholder="Facebook Marketplace, eBay…" list="ob-platform-dl">
+          <datalist id="ob-platform-dl"><option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option></datalist>
+        </div>
+        <div class="fg">
+          <label>Date Added</label>
+          <input type="date" id="ob-date">
+        </div>
+      </div>
+      <div class="fg">
+        <label>Notes</label>
+        <textarea id="ob-notes" rows="2" style="resize:vertical;background:var(--bg3);border:1px solid var(--b1);border-radius:5px;padding:8px 11px;color:var(--t1);font-size:13px;outline:none;font-family:var(--font-sans);width:100%" placeholder="Any additional notes…"></textarea>
+      </div>
+    </div>
+    <div class="mf mf2">
+      <button class="btn bd btn-sm" id="ob-delete-btn" onclick="obDeleteItem()" style="display:none">✕ Delete</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn bg" onclick="closeOv('ob-add-ov')">Cancel</button>
+        <button class="btn bs" onclick="obSaveItem()">✓ Save Item</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MARK AS SOLD MODAL ══════════════════════════════════════════ -->
+<div class="overlay" id="ob-sold-ov">
+  <div class="modal" style="max-width:420px">
+    <div class="mh">
+      <div>
+        <div class="mt">✓ MARK AS SOLD</div>
+        <div class="ms" id="ob-sold-item-name">Item name</div>
+      </div>
+      <button class="mx" onclick="closeOv('ob-sold-ov')">✕</button>
+    </div>
+    <div class="mb">
+      <input type="hidden" id="ob-sold-id">
+      <div class="fgrid2" style="margin-bottom:14px">
+        <div class="fg">
+          <label>Actual Sale Price *</label>
+          <input type="number" id="ob-sold-price" placeholder="0.00" min="0" step="0.01">
+        </div>
+        <div class="fg">
+          <label>Date Sold</label>
+          <input type="date" id="ob-sold-date">
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:14px">
+        <label>Sold On Platform *</label>
+        <select id="ob-sold-platform">
+          <option value="">— Select platform —</option>
+          <option>Facebook Marketplace</option><option>eBay</option><option>OfferUp</option><option>Craigslist</option><option>Mercari</option><option>Poshmark</option><option>Amazon</option><option>In-Store</option><option>WhatsApp</option><option>Instagram</option><option>Other</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Buyer Notes (optional)</label>
+        <input id="ob-sold-notes" placeholder="e.g. Local pickup, paid cash">
+      </div>
+      <div id="ob-sold-margin" style="margin-top:14px;padding:10px 14px;border-radius:6px;font-size:12px;display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:var(--green)"></div>
+    </div>
+    <div class="mf mf2">
+      <button class="btn bg" onclick="closeOv('ob-sold-ov')">Cancel</button>
+      <button class="btn bs" onclick="obConfirmSold()" style="background:#0b6b7a;border-color:#0b6b7a">✓ Confirm Sale</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- ══ EMAIL INVOICE MODAL ══════════════════════════════════════════ -->
 <div class="overlay" id="email-inv-ov">
