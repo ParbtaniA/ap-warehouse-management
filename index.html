@@ -4826,16 +4826,18 @@ window.addEventListener('load', () => {
     <h1>⬇ RECEIVE INVENTORY</h1>
     <p>Upload a supplier invoice + receiving sheet · AI parses and reconciles both · confirm to post as Purchase transactions</p>
   </div>
-  <div style="text-align:right;margin-bottom:16px">
+  <!-- ── HEADER ROW: title + key status in one line ─────────────── -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="rcv-key-status" style="font-size:11px;font-family:var(--font-mono)"></span>
+    </div>
     <button class="btn bg btn-sm" onclick="rcvManageApiKey()" style="font-size:11px">
       🔑 API Key Setup
     </button>
-    <span id="rcv-key-status" style="font-size:10px;color:var(--t3);margin-left:8px;font-family:var(--font-mono)"></span>
-  <div style="display:none">
   </div>
 
   <!-- ── STEP INDICATOR ──────────────────────────────────────────── -->
-  <div id="rcv-steps" style="display:flex;gap:0;margin-bottom:24px;border:1px solid var(--b1);border-radius:8px;overflow:hidden">
+  <div id="rcv-steps" style="display:flex;gap:0;margin-bottom:24px;border:1px solid var(--b1);border-radius:8px;overflow:hidden;max-width:700px;margin-left:auto;margin-right:auto">
     <div class="rcv-step on" id="rcv-step-1" style="flex:1;padding:12px 16px;font-size:11px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;border-right:1px solid var(--b1);background:var(--bg2)">
       <span style="color:var(--cyan)">01</span> &nbsp;UPLOAD DOCUMENTS
     </div>
@@ -4848,7 +4850,7 @@ window.addEventListener('load', () => {
   </div>
 
   <!-- ══ STEP 1: UPLOAD ════════════════════════════════════════════ -->
-  <div id="rcv-panel-1">
+  <div id="rcv-panel-1" style="max-width:700px;margin:0 auto">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
 
       <!-- Supplier Invoice -->
@@ -4881,7 +4883,7 @@ window.addEventListener('load', () => {
     </div>
 
     <!-- Supplier + Order info -->
-    <div class="card" style="padding:18px 20px;margin-bottom:20px">
+    <div class="card" style="padding:18px 20px;margin-bottom:20px;border:1px solid var(--b1)">
       <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:14px">ORDER DETAILS (pre-fill or leave blank for AI to detect)</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
         <div class="fg">
@@ -5020,7 +5022,7 @@ window.addEventListener('load', () => {
   </div>
 
   <!-- AI parsing in progress overlay -->
-  <div id="rcv-loading" style="display:none;text-align:center;padding:48px 20px">
+  <div id="rcv-loading" style="display:none;text-align:center;padding:48px 20px;max-width:700px;margin:0 auto">
     <div style="width:40px;height:40px;border:3px solid var(--bg4);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px"></div>
     <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px" id="rcv-loading-msg">🤖 Parsing documents…</div>
     <div style="font-size:12px;color:var(--t3)">AI is reading your invoice and receiving sheet — usually takes 10–20 seconds</div>
