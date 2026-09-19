@@ -3655,7 +3655,7 @@ function clearMultiForm(keepHeader=false) {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// INVOICE & PURCHASE ORDER SYSTEM — Venz Aura LLC
+// INVOICE & PURCHASE ORDER SYSTEM — Reliance Trading LLC
 // ═══════════════════════════════════════════════════════════════════
 
 let _invStripeLink = '';   // persisted stripe link per invoice
@@ -5093,13 +5093,13 @@ window.addEventListener('load', () => {
                   <polygon points="22,31 29,44 33,31" fill="#1aaf85"/>
                 </g>
                 <!-- VenzAura -->
-                <text x="52" y="32" font-family="Arial,sans-serif" font-size="22" font-weight="700" fill="#ffffff" letter-spacing="0.5">VenzAura</text>
+                <text x="52" y="30" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#ffffff" letter-spacing="0.3">Reliance Trading</text>
                 <!-- Tagline — more space, smaller letter-spacing so it fits -->
                 <text x="52" y="46" font-family="Arial,sans-serif" font-size="8.5" fill="#a0d8d0" letter-spacing="1.5">ELEVATE THE EVERYDAY</text>
               </svg>
               <!-- Business details — plain text, no links (avoids email obfuscation) -->
               <div style="margin-top:14px;font-size:11px;color:#a0d8d0;line-height:1.9;white-space:nowrap">
-                <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px">Venz Aura LLC</div>
+                <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px">Reliance Trading LLC</div>
                 <div>19343 SW 39th St, Miramar, FL 33029</div>
                 <div>Tel: +1-305-804-7761</div>
                 <div>Email: purchase&#64;venzaura.com</div>
@@ -5197,8 +5197,8 @@ window.addEventListener('load', () => {
               </div>
             </div>
             <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
-              <div style="font-size:9px;color:rgba(160,216,208,.6)">Prices, specifications and availability are subject to change without notice. Venz Aura LLC reserves the right to cancel orders at its discretion. This document constitutes a binding invoice upon acceptance of goods or services.</div>
-              <div style="font-size:9px;color:rgba(160,216,208,.5);white-space:nowrap;margin-left:16px">© 2026 Venz Aura LLC</div>
+              <div style="font-size:9px;color:rgba(160,216,208,.6)">Prices, specifications and availability are subject to change without notice. Reliance Trading LLC reserves the right to cancel orders at its discretion. This document constitutes a binding invoice upon acceptance of goods or services.</div>
+              <div style="font-size:9px;color:rgba(160,216,208,.5);white-space:nowrap;margin-left:16px">© 2026 Reliance Trading LLC</div>
             </div>
           </div>
 
@@ -5241,7 +5241,7 @@ window.addEventListener('load', () => {
         </div>
       </div>
       <div class="fg" style="margin-bottom:12px"><label>Subject</label>
-        <input id="email-subject" placeholder="Invoice from Venz Aura LLC">
+        <input id="email-subject" placeholder="Invoice from Reliance Trading LLC">
       </div>
       <div class="fg" style="margin-bottom:12px"><label>Message</label>
         <textarea id="email-body" rows="4" style="resize:vertical;background:var(--bg3);border:1px solid var(--b1);border-radius:5px;padding:8px 11px;color:var(--t1);font-size:13px;outline:none;font-family:var(--font-sans);width:100%"
@@ -5429,7 +5429,7 @@ function openEmailInvoice() {
   // Pre-fill subject with invoice number
   const invNum = $('inv-number')?.textContent?.replace('# ','') || 'Invoice';
   const docType = $('inv-doc-type')?.textContent || 'Invoice';
-  sv('email-subject', `${docType} ${invNum} from Venz Aura LLC`);
+  sv('email-subject', `${docType} ${invNum} from Reliance Trading LLC`);
   sv('email-body', 'Please find your invoice details below. Thank you for your business.\n\nFor questions, contact us at purchase@venzaura.com or +1-305-804-7761.');
   const status = $('email-send-status');
   if (status) status.style.display = 'none';
@@ -5464,7 +5464,7 @@ async function sendInvoiceEmail() {
       message:       ($('email-body')?.value    || '').trim(),
       invoice_html:  invHtml,
       invoice_number: invNum,
-      from_name:     'Venz Aura LLC',
+      from_name:     'Reliance Trading LLC',
       from_email:    'purchase@venzaura.com',
     });
     const status = $('email-send-status');
