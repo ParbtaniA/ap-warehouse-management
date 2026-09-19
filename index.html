@@ -5087,12 +5087,9 @@ window.addEventListener('load', () => {
             <div style="min-width:240px;flex:1">
               <!-- Company name as text (logo removed) -->
               <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:.3px;line-height:1.2">Reliance Trading LLC</div>
-              <!-- Business details — plain text, no links (avoids email obfuscation) -->
-              <div style="margin-top:14px;font-size:11px;color:#a0d8d0;line-height:1.9;white-space:nowrap">
-                <div>19343 SW 39th St, Miramar, FL 33029</div>
+              <!-- Business details — phone only -->
+              <div style="margin-top:12px;font-size:11px;color:#a0d8d0;line-height:1.9;white-space:nowrap">
                 <div>Tel: +1-305-804-7761</div>
-                <div>Email: purchase&#64;venzaura.com</div>
-                <div>Web: www.venzaura.com</div>
               </div>
             </div>
             <!-- Doc type + number — right side, no flex shrink -->
@@ -5182,7 +5179,7 @@ window.addEventListener('load', () => {
               </div>
               <div>
                 <div style="font-size:9px;font-weight:700;color:#2dd4a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">CONTACT</div>
-                <div style="font-size:10px;color:#a0d8d0;line-height:1.6"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="1c6c696e7f747d6f795c6a7972667d696e7d327f7371">[email&#160;protected]</a><br>+1-305-804-7761<br>www.venzaura.com</div>
+                <div style="font-size:10px;color:#a0d8d0;line-height:1.6">+1-305-804-7761</div>
               </div>
             </div>
             <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
@@ -5419,7 +5416,7 @@ function openEmailInvoice() {
   const invNum = $('inv-number')?.textContent?.replace('# ','') || 'Invoice';
   const docType = $('inv-doc-type')?.textContent || 'Invoice';
   sv('email-subject', `${docType} ${invNum} from Reliance Trading LLC`);
-  sv('email-body', 'Please find your invoice details below. Thank you for your business.\n\nFor questions, contact us at purchase@venzaura.com or +1-305-804-7761.');
+  sv('email-body', 'Please find your invoice details below. Thank you for your business.\n\nFor questions, call us at +1-305-804-7761.');
   const status = $('email-send-status');
   if (status) status.style.display = 'none';
   openOv('email-inv-ov');
