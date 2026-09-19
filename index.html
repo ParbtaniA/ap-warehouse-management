@@ -5489,42 +5489,54 @@ function downloadInvoicePdf() {
   const docType = ($('inv-doc-type')?.textContent || 'Invoice').replace(/\s+/g,'_');
   const filename = docType + '_' + invNum + '.pdf';
 
-  if (typeof html2pdf !== 'undefined') {
-    // Clone into a clean off-screen container so styles render correctly
-    const container = document.createElement('div');
-    container.style.cssText = 'position:absolute;left:-9999px;top:0;width:794px;background:#fff';
-    container.appendChild(doc.cloneNode(true));
-    document.body.appendChild(container);
-
-    const opt = {
-      margin:      [10, 10, 10, 10],
-      filename:    filename,
-      image:       { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false,
-                     allowTaint: true, backgroundColor: '#fff' },
-      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
-    };
-
-    toast('⬇ Generating PDF — please wait…', false, 'ok');
-    html2pdf()
-      .set(opt)
-      .from(container)
-      .save()
-      .then(() => {
-        document.body.removeChild(container);
-        toast('✓ PDF downloaded: ' + filename, false, 'ok');
-      })
-      .catch(e => {
-        document.body.removeChild(container);
-        toast('PDF failed — using print dialog instead', false, 'warn');
-        printInvoice();
-      });
-  } else {
-    // html2pdf not loaded — fall back to browser print
+  if (typeof html2pdf === 'undefined') {
     toast('Tip: in the print dialog, choose "Save as PDF"', false, 'warn');
     setTimeout(() => printInvoice(), 500);
+    return;
   }
+
+  // IMPORTANT: html2canvas returns a zero-height canvas for elements parked
+  // off-screen (left:-9999px). Render on-screen but behind everything, and
+  // pass explicit width/height so the full invoice is captured and paginated.
+  const container = document.createElement('div');
+  container.style.cssText =
+    'position:fixed;left:0;top:0;width:794px;background:#fff;z-index:-9999;pointer-events:none';
+  const clone = doc.cloneNode(true);
+  clone.style.cssText += ';overflow:visible;max-height:none;width:794px;box-shadow:none;border-radius:0';
+  container.appendChild(clone);
+  document.body.appendChild(container);
+
+  toast('⬇ Generating PDF — please wait…', false, 'ok');
+
+  (async () => {
+    try {
+      await new Promise(r => setTimeout(r, 350));   // let layout settle
+      const realH = clone.scrollHeight;
+      container.style.height = realH + 'px';
+
+      const opt = {
+        margin:      [10, 10, 10, 10],
+        filename:    filename,
+        image:       { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff',
+                       width: 794, height: realH,
+                       windowWidth: 794, windowHeight: realH,
+                       scrollX: 0, scrollY: 0 },
+        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+        // 'avoid-all' collapses long invoices onto one page and truncates them.
+        pagebreak:   { mode: ['css', 'legacy'], avoid: ['tr', 'thead'] }
+      };
+
+      await html2pdf().set(opt).from(clone).save();
+      toast('✓ PDF downloaded: ' + filename, false, 'ok');
+    } catch (e) {
+      console.error('PDF generation failed:', e);
+      toast('PDF failed — using print dialog instead', false, 'warn');
+      printInvoice();
+    } finally {
+      if (container.parentNode) container.parentNode.removeChild(container);
+    }
+  })();
 }
 
 // Init EmailJS on load if already configured
