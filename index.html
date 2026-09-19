@@ -5495,46 +5495,54 @@ function downloadInvoicePdf() {
     return;
   }
 
-  // IMPORTANT: html2canvas returns a zero-height canvas for elements parked
-  // off-screen (left:-9999px). Render on-screen but behind everything, and
-  // pass explicit width/height so the full invoice is captured and paginated.
-  const container = document.createElement('div');
-  container.style.cssText =
-    'position:fixed;left:0;top:0;width:794px;background:#fff;z-index:-9999;pointer-events:none';
-  const clone = doc.cloneNode(true);
-  clone.style.cssText += ';overflow:visible;max-height:none;width:794px;box-shadow:none;border-radius:0;margin:0';
-  container.appendChild(clone);
-  document.body.appendChild(container);
+  // Render the REAL element in place. Cloning to an off-screen/fixed wrapper
+  // makes html2canvas capture a clipped or zero-height canvas. Instead we
+  // temporarily pin the invoice to exact A4 content width (794px @96dpi) and
+  // remove the scroll clipping, then restore everything afterwards.
+  const scroll = doc.parentElement;
+  const saved = {
+    sMaxH: scroll.style.maxHeight, sOv: scroll.style.overflow,
+    sW:    scroll.style.width,     sTop: scroll.scrollTop,
+    dW:    doc.style.width,        dMaxH: doc.style.maxHeight,
+    dOv:   doc.style.overflow,     dShadow: doc.style.boxShadow
+  };
+  const restore = () => {
+    scroll.style.maxHeight = saved.sMaxH; scroll.style.overflow = saved.sOv;
+    scroll.style.width     = saved.sW;    scroll.scrollTop       = saved.sTop;
+    doc.style.width        = saved.dW;    doc.style.maxHeight    = saved.dMaxH;
+    doc.style.overflow     = saved.dOv;   doc.style.boxShadow    = saved.dShadow;
+  };
 
   toast('⬇ Generating PDF — please wait…', false, 'ok');
 
   (async () => {
     try {
-      await new Promise(r => setTimeout(r, 350));   // let layout settle
-      const realH = clone.scrollHeight;
-      container.style.height = realH + 'px';
+      scroll.style.maxHeight = 'none'; scroll.style.overflow = 'visible';
+      scroll.style.width     = '794px'; scroll.scrollTop      = 0;
+      doc.style.width        = '794px'; doc.style.maxHeight   = 'none';
+      doc.style.overflow     = 'visible'; doc.style.boxShadow = 'none';
+
+      await new Promise(r => setTimeout(r, 300));   // let layout settle
 
       const opt = {
         margin:      [10, 10, 10, 10],
         filename:    filename,
         image:       { type: 'jpeg', quality: 0.98 },
-        // Do NOT pass width/height/windowWidth/scrollX here — they make
-        // html2canvas crop the capture and shift the layout sideways.
-        // The clone is already on-screen at 794px, so natural measurement works.
+        // No width/height/windowWidth/scrollX — those crop and shift the capture.
         html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' },
         jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
         // 'avoid-all' collapses long invoices onto one page and truncates them.
         pagebreak:   { mode: ['css', 'legacy'], avoid: ['tr', 'thead'] }
       };
 
-      await html2pdf().set(opt).from(clone).save();
+      await html2pdf().set(opt).from(doc).save();
       toast('✓ PDF downloaded: ' + filename, false, 'ok');
     } catch (e) {
       console.error('PDF generation failed:', e);
       toast('PDF failed — using print dialog instead', false, 'warn');
       printInvoice();
     } finally {
-      if (container.parentNode) container.parentNode.removeChild(container);
+      restore();
     }
   })();
 }
