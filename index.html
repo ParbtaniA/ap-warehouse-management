@@ -5502,7 +5502,7 @@ function downloadInvoicePdf() {
   container.style.cssText =
     'position:fixed;left:0;top:0;width:794px;background:#fff;z-index:-9999;pointer-events:none';
   const clone = doc.cloneNode(true);
-  clone.style.cssText += ';overflow:visible;max-height:none;width:794px;box-shadow:none;border-radius:0';
+  clone.style.cssText += ';overflow:visible;max-height:none;width:794px;box-shadow:none;border-radius:0;margin:0';
   container.appendChild(clone);
   document.body.appendChild(container);
 
@@ -5518,10 +5518,10 @@ function downloadInvoicePdf() {
         margin:      [10, 10, 10, 10],
         filename:    filename,
         image:       { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff',
-                       width: 794, height: realH,
-                       windowWidth: 794, windowHeight: realH,
-                       scrollX: 0, scrollY: 0 },
+        // Do NOT pass width/height/windowWidth/scrollX here — they make
+        // html2canvas crop the capture and shift the layout sideways.
+        // The clone is already on-screen at 794px, so natural measurement works.
+        html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' },
         jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
         // 'avoid-all' collapses long invoices onto one page and truncates them.
         pagebreak:   { mode: ['css', 'legacy'], avoid: ['tr', 'thead'] }
