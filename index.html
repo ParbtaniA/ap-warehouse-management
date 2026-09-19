@@ -5495,10 +5495,16 @@ function downloadInvoicePdf() {
     return;
   }
 
-  // Render the REAL element in place. Cloning to an off-screen/fixed wrapper
-  // makes html2canvas capture a clipped or zero-height canvas. Instead we
-  // temporarily pin the invoice to exact A4 content width (794px @96dpi) and
-  // remove the scroll clipping, then restore everything afterwards.
+  // ── Why the element must be sized to the PRINTABLE width ──────────
+  // html2pdf builds its per-page canvas at the page's *inner* width
+  // (pageWidth - margins) converted to px, then draws the rendered canvas
+  // into it WITHOUT scaling. If the element is wider than that, the
+  // overflow is silently sliced off — that was the cut-off left edge.
+  const MARGIN_MM = 10;
+  const A4_W_MM   = 210;
+  const PX_PER_MM = 96 / 25.4;                                  // CSS px per mm
+  const RENDER_W  = Math.floor((A4_W_MM - MARGIN_MM * 2) * PX_PER_MM);  // 718px
+
   const scroll = doc.parentElement;
   const saved = {
     sMaxH: scroll.style.maxHeight, sOv: scroll.style.overflow,
@@ -5518,19 +5524,19 @@ function downloadInvoicePdf() {
   (async () => {
     try {
       scroll.style.maxHeight = 'none'; scroll.style.overflow = 'visible';
-      scroll.style.width     = '794px'; scroll.scrollTop      = 0;
-      doc.style.width        = '794px'; doc.style.maxHeight   = 'none';
+      scroll.style.width     = RENDER_W + 'px'; scroll.scrollTop = 0;
+      doc.style.width        = RENDER_W + 'px'; doc.style.maxHeight = 'none';
       doc.style.overflow     = 'visible'; doc.style.boxShadow = 'none';
 
-      await new Promise(r => setTimeout(r, 300));   // let layout settle
+      await new Promise(r => setTimeout(r, 300));   // let layout reflow
 
       const opt = {
-        margin:      [10, 10, 10, 10],
+        margin:      MARGIN_MM,
         filename:    filename,
-        image:       { type: 'jpeg', quality: 0.98 },
+        image:       { type: 'jpeg', quality: 0.95 },
         // No width/height/windowWidth/scrollX — those crop and shift the capture.
         html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' },
-        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
         // 'avoid-all' collapses long invoices onto one page and truncates them.
         pagebreak:   { mode: ['css', 'legacy'], avoid: ['tr', 'thead'] }
       };
