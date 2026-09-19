@@ -5085,21 +5085,10 @@ window.addEventListener('load', () => {
           <div id="inv-header" style="background:#0b6b7a;padding:28px 36px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap">
             <!-- Logo + address — left side, min-width so it never squishes -->
             <div style="min-width:240px;flex:1">
-              <!-- VA monogram + wordmark — wider SVG, no clipping -->
-              <svg width="220" height="56" viewBox="0 0 220 56" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
-                <!-- VA monogram -->
-                <g transform="translate(0,5)">
-                  <polygon points="0,0 13,0 22,31 31,0 44,0 29,44 15,44" fill="#2dd4a0"/>
-                  <polygon points="22,31 29,44 33,31" fill="#1aaf85"/>
-                </g>
-                <!-- VenzAura -->
-                <text x="52" y="30" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#ffffff" letter-spacing="0.3">Reliance Trading</text>
-                <!-- Tagline — more space, smaller letter-spacing so it fits -->
-                <text x="52" y="46" font-family="Arial,sans-serif" font-size="8.5" fill="#a0d8d0" letter-spacing="1.5">ELEVATE THE EVERYDAY</text>
-              </svg>
+              <!-- Company name as text (logo removed) -->
+              <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:.3px;line-height:1.2">Reliance Trading LLC</div>
               <!-- Business details — plain text, no links (avoids email obfuscation) -->
               <div style="margin-top:14px;font-size:11px;color:#a0d8d0;line-height:1.9;white-space:nowrap">
-                <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px">Reliance Trading LLC</div>
                 <div>19343 SW 39th St, Miramar, FL 33029</div>
                 <div>Tel: +1-305-804-7761</div>
                 <div>Email: purchase&#64;venzaura.com</div>
