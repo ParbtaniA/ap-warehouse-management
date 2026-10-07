@@ -580,6 +580,7 @@ if (typeof pdfjsLib !== 'undefined') {
   <button class="nb" onclick="go('reports',this)">▤ Reports</button>
   <button class="nb" onclick="go('receive',this)" style="border-left:1px solid var(--b2);margin-left:4px;padding-left:12px">⬇ Receive</button>
   <button class="nb" onclick="go('openbox',this)" style="border-left:1px solid var(--b2);margin-left:4px;padding-left:12px">📦 Open Box</button>
+  <button class="nb" onclick="go('receipt',this)" style="border-left:1px solid var(--b2);margin-left:4px;padding-left:12px">🧾 Receipt</button>
   <div class="tb-end">
     <div id="user-pill" style="font-size:10px;color:var(--t3);font-family:var(--font-mono);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;display:none"></div>
     <div id="fs-status" style="font-size:10px;font-family:var(--font-mono);display:none;padding:3px 8px;border-radius:3px"></div>
@@ -1962,7 +1963,7 @@ function upcTag(upc) {
 const RENDER = {
   dashboard: renderDash, products: renderProducts, transactions: renderTrans,
   upc: renderUpc, stock: renderStock, lookup: ()=>{},
-  suppliers: renderSuppliers, categories: renderCats, reports: initReports, receive: renderReceive, openbox: renderOpenBox
+  suppliers: renderSuppliers, categories: renderCats, reports: initReports, receive: renderReceive, openbox: renderOpenBox, receipt: renderReceipt
 };
 
 function go(id, btn) {
@@ -4975,6 +4976,267 @@ function obExportCSV() {
   toast('⬇ CSV exported', false, 'ok');
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// RECEIPT BOOK SCANNER — photograph a handwritten PO, post as Purchases
+// ═══════════════════════════════════════════════════════════════════
+const RCB = { file:null, dataUrl:null, mime:null, lines:[], meta:{} };
+
+function renderReceipt(){
+  if ($('rcb-date') && !gv('rcb-date')) sv('rcb-date', new Date().toISOString().split('T')[0]);
+  const dl = $('rcb-sup-dl');
+  if (dl) dl.innerHTML = suppliers.map(s=>`<option value="${s.name}">`).join('');
+  rcbKeyStatus();
+}
+
+function rcbKeyStatus(){
+  const el = $('rcb-key-status'); if(!el) return;
+  fetch('/.netlify/functions/parse-docs',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({_ping:true})})
+    .then(r=>{ el.textContent = r.status===200 ? '🟢 Reader ready' : '⚠ AI reader not configured';
+               el.style.color = r.status===200 ? 'var(--green)' : 'var(--amber)'; })
+    .catch(()=>{ el.textContent='⚠ Reader unreachable'; el.style.color='var(--amber)'; });
+}
+
+// ── file intake ──────────────────────────────────────────────────
+function rcbDragOver(e){ e.preventDefault(); $('rcb-drop').style.borderColor='var(--cyan)'; }
+function rcbDragLeave(){ $('rcb-drop').style.borderColor='var(--b2)'; }
+function rcbDrop(e){ e.preventDefault(); rcbDragLeave(); const f=e.dataTransfer.files[0]; if(f) rcbSetFile(f); }
+function rcbPick(e){ const f=e.target.files[0]; if(f) rcbSetFile(f); }
+
+async function rcbSetFile(file){
+  RCB.file = file;
+  $('rcb-filename').textContent = '✓ ' + file.name;
+  $('rcb-drop').style.borderColor = 'var(--green)';
+  $('rcb-parse-btn').disabled = false;
+  try {
+    let dataUrl;
+    if (file.type === 'application/pdf') {
+      const b64 = await pdfPageToJpeg(file, 1, 1600);
+      dataUrl = 'data:image/jpeg;base64,' + b64; RCB.mime='image/jpeg';
+    } else {
+      dataUrl = await rcbCompress(file); RCB.mime='image/jpeg';
+    }
+    RCB.dataUrl = dataUrl;
+    $('rcb-preview').src = dataUrl;
+    $('rcb-preview-wrap').style.display='block';
+  } catch(e){ toast('Could not read that file: '+e.message,false,'err'); }
+}
+
+// Downscale + compress so handwriting stays legible but payload stays small
+function rcbCompress(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>{ const img=new Image();
+      img.onload=()=>{
+        const max=1800, sc=Math.min(max/img.width, max/img.height, 1);
+        const c=document.createElement('canvas');
+        c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        res(c.toDataURL('image/jpeg',0.9));
+      };
+      img.onerror=()=>rej(new Error('unsupported image'));
+      img.src=r.result; };
+    r.onerror=()=>rej(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+// ── parse ────────────────────────────────────────────────────────
+async function rcbParse(){
+  if(!RCB.dataUrl){ toast('Add a receipt photo first',false,'err'); return; }
+  $('rcb-step1').style.display='none'; $('rcb-step2').style.display='none';
+  $('rcb-loading').style.display='block';
+
+  const SYS = `You read handwritten PURCHASE ORDER / receipt-book slips for a phone wholesaler.
+Return ONLY valid JSON, no markdown, no commentary:
+{"supplier":"","poNumber":"","date":"YYYY-MM-DD","notes":"",
+ "items":[{"raw":"","qty":0,"model":"","storage":"","color":"","region":"US"}]}
+
+Rules:
+- Use the QUANTITY RECEIVED column for qty. Ignore QUANTITY ORDERED if blank.
+- Ditto marks (" or '') mean repeat the value from the row above — expand them fully into each row.
+- "raw" = the description exactly as written on that line (after expanding ditto marks).
+- model: normalise to one of: iPhone 18, iPhone 18 Pro, iPhone 18 Pro Max, iPhone 17, iPhone 17 Pro,
+  iPhone 17 Pro Max, iPhone 17 Air, iPhone 16, iPhone 16 Pro, iPhone 16 Pro Max, iPad, AirPods, etc.
+  "18 Max", "18Max", "iPhone 18 Max" all mean iPhone 18 Pro Max.
+- storage: like 128GB, 256GB, 512GB, 1TB, 2TB.
+- color: single word as written (Black, Glacier, Silver, Burgundy, Blue, Orange, White, Natural…).
+- region: default "US" unless the slip clearly says JP/EU/HK/CH/TH/IN/LA/CA.
+- date: the ship/received date on the slip. 10-07-26 means 2026-10-07 (MM-DD-YY).
+- notes: box count, tracking numbers, anything else handwritten.
+- If a field is unreadable use an empty string. Never invent line items.`;
+
+  try{
+    const body = { system: SYS, messages: [{ role:'user', content:[
+      { type:'image', source:{ type:'base64', media_type:'image/jpeg', data: RCB.dataUrl.split(',')[1] } },
+      { type:'text', text:'Read this purchase order slip and return the JSON.' }
+    ]}]};
+
+    const resp = await fetch('/.netlify/functions/parse-docs',{method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if(!resp.ok){ const e=await resp.json().catch(()=>({})); throw new Error(e.error||('HTTP '+resp.status)); }
+    const data = await resp.json();
+    const txt  = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');
+    let parsed;
+    try { parsed = JSON.parse(txt.replace(/```json|```/g,'').trim()); }
+    catch(e){ throw new Error('Could not understand the reply — try a sharper photo'); }
+
+    RCB.meta = parsed;
+    RCB.lines = (parsed.items||[]).map((it,i)=>{
+      const match = rcbMatch(it);
+      return { id:i, raw:it.raw||'', qty:Number(it.qty)||0, productId:match.id,
+               confidence:match.how, price:'', include: !!match.id && (Number(it.qty)||0)>0 };
+    });
+
+    sv('rcb-sup',  parsed.supplier || '');
+    sv('rcb-po',   parsed.poNumber || '');
+    sv('rcb-date', parsed.date || new Date().toISOString().split('T')[0]);
+    sv('rcb-notes',parsed.notes || '');
+
+    $('rcb-loading').style.display='none';
+    $('rcb-step2').style.display='block';
+    rcbRender();
+  }catch(e){
+    $('rcb-loading').style.display='none'; $('rcb-step1').style.display='block';
+    toast('Read failed: '+e.message,false,'err'); console.error(e);
+  }
+}
+
+// ── deterministic catalog matching ───────────────────────────────
+const RCB_FAM = [
+  [/18\s*pro\s*max|18\s*max/i,'18PROMAX'], [/18\s*pro/i,'18PRO'], [/18/i,'IP18'],
+  [/17\s*pro\s*max|17\s*max/i,'17PROMAX'], [/17\s*air/i,'IP17A'], [/17\s*pro/i,'17PRO'], [/17/i,'IP17'],
+  [/16\s*pro\s*max/i,'16PROMAX'], [/16\s*pro/i,'16PRO'], [/16/i,'IP16'],
+  [/15\s*pro\s*max/i,'15PROMAX'], [/15\s*pro/i,'15PRO'], [/15/i,'IP15'],
+];
+function rcbMatch(it){
+  const prods = getAllProds();
+  const ids = new Map(prods.map(p=>[p.id.toUpperCase(), p]));
+  const region = (it.region||'US').toUpperCase();
+  const blob = `${it.model||''} ${it.raw||''}`;
+  let fam=null; for(const [re,f] of RCB_FAM){ if(re.test(blob)){ fam=f; break; } }
+  const size = (it.storage||'').toUpperCase().replace(/\s/g,'')
+                 .replace(/^1TB?$/,'1T').replace(/^2TB?$/,'2T').replace(/GB$/,'');
+  const color = (it.color||'').toUpperCase().replace(/\s/g,'');
+  if (fam && size && color){
+    const direct = `${region}-${fam}-${size}-${color}`;
+    if (ids.has(direct)) return {id:direct, how:'exact'};
+  }
+  // fuzzy: score catalog ids on token overlap
+  const want = [fam,size,color].filter(Boolean);
+  if (want.length){
+    let best=null,bestScore=0;
+    for (const p of prods){
+      const U=p.id.toUpperCase();
+      if (!U.startsWith(region+'-')) continue;
+      let s=0; want.forEach(w=>{ if(U.includes('-'+w+'-')||U.endsWith('-'+w)||U.includes('-'+w)) s++; });
+      if (s>bestScore){ bestScore=s; best=U; }
+    }
+    if (best && bestScore>=want.length) return {id:best, how:'exact'};
+    if (best && bestScore>=2)           return {id:best, how:'likely'};
+  }
+  return {id:'', how:'none'};
+}
+
+// ── render confirm table ─────────────────────────────────────────
+function rcbRender(){
+  const tb=$('rcb-tbody'); if(!tb) return;
+  const BADGE={ exact:'<span style="font-size:10px;font-weight:700;color:var(--green)">✓ matched</span>',
+                likely:'<span style="font-size:10px;font-weight:700;color:var(--amber)">~ likely</span>',
+                none:'<span style="font-size:10px;font-weight:700;color:var(--red)">✕ no match</span>' };
+  const prods=getAllProds();
+  tb.innerHTML = RCB.lines.map(l=>{
+    const opts=prods.filter(p=>!l.productId||p.id.toUpperCase().includes(l.productId.slice(0,9)))
+                    .slice(0,12).map(p=>`<option value="${p.id}">`).join('');
+    const inp='background:var(--bg3);border:1px solid var(--b1);border-radius:4px;color:var(--t1);font-size:12px;font-family:var(--font-mono);padding:3px 7px;outline:none';
+    return `<tr style="border-bottom:1px solid var(--b1)${l.include?'':';opacity:.45'}">
+      <td style="padding:7px 10px;text-align:center"><input type="checkbox" ${l.include?'checked':''}
+          onchange="rcbUpd(${l.id},'include',this.checked)" style="width:16px;height:16px;cursor:pointer"></td>
+      <td style="padding:7px 10px;font-size:12px;color:var(--t2)">${l.raw||'—'}</td>
+      <td style="padding:6px 10px"><datalist id="rcb-dl-${l.id}">${opts}</datalist>
+        <input value="${l.productId}" list="rcb-dl-${l.id}" placeholder="Product ID"
+          onchange="rcbUpd(${l.id},'productId',this.value.trim().toUpperCase())"
+          style="${inp};color:var(--cyan);width:220px"></td>
+      <td style="padding:6px 10px;text-align:center"><input type="number" min="0" value="${l.qty}"
+          onchange="rcbUpd(${l.id},'qty',+this.value)" style="${inp};width:64px;text-align:center;font-weight:700"></td>
+      <td style="padding:6px 10px;text-align:right"><input type="number" min="0" step="0.01" value="${l.price}"
+          placeholder="—" onchange="rcbUpd(${l.id},'price',this.value)" style="${inp};width:84px;text-align:right"></td>
+      <td style="padding:7px 10px">${BADGE[l.confidence]||''}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="empty">No line items found</td></tr>';
+
+  const inc=RCB.lines.filter(l=>l.include);
+  const units=inc.reduce((a,l)=>a+(+l.qty||0),0);
+  const unmatched=RCB.lines.filter(l=>!l.productId).length;
+  $('rcb-kpis').innerHTML=[['Lines read',RCB.lines.length,'var(--t1)'],
+    ['Units',units,'var(--cyan)'],['Unmatched',unmatched,unmatched?'var(--red)':'var(--green)']]
+    .map(([l,v,c])=>`<div class="card" style="padding:12px;text-align:center">
+      <div style="font-size:20px;font-weight:800;color:${c}">${v}</div>
+      <div style="font-size:10px;color:var(--t3);font-family:var(--font-mono);margin-top:3px">${l}</div></div>`).join('');
+  $('rcb-sel').textContent=`${inc.length} of ${RCB.lines.length} selected · ${units} units`;
+}
+
+function rcbUpd(id,f,v){
+  const l=RCB.lines.find(x=>x.id===id); if(!l) return;
+  l[f]=v;
+  if(f==='productId'){
+    const ok=getAllProds().some(p=>p.id.toUpperCase()===v);
+    l.confidence = v ? (ok?'exact':'none') : 'none';
+    if(!ok&&v) toast('That Product ID is not in the catalog',false,'warn');
+  }
+  rcbRender();
+}
+
+function rcbAddRow(){
+  RCB.lines.push({id:Date.now(),raw:'(added manually)',qty:0,productId:'',confidence:'none',price:'',include:true});
+  rcbRender();
+}
+
+// ── post ─────────────────────────────────────────────────────────
+async function rcbPost(){
+  const sel=RCB.lines.filter(l=>l.include && l.qty>0);
+  if(!sel.length){ toast('Nothing selected to post',false,'err'); return; }
+  const bad=sel.filter(l=>!getAllProds().some(p=>p.id.toUpperCase()===l.productId));
+  if(bad.length){ toast(`${bad.length} line(s) have no valid Product ID`,false,'err'); return; }
+
+  const sup=gv('rcb-sup').trim(), date=gv('rcb-date')||new Date().toISOString().split('T')[0];
+  const po=gv('rcb-po').trim(), notes=gv('rcb-notes').trim();
+  const order = po ? ('PO-'+po.replace(/^PO-?/i,'')) : ('PO-'+Date.now());
+
+  const btn=$('rcb-post-btn'); if(btn){ btn.disabled=true; btn.textContent='⏳ Posting…'; }
+  let n=0;
+  try{
+    for(const l of sel){
+      const prod=getAllProds().find(p=>p.id.toUpperCase()===l.productId);
+      const t={ id:Date.now()+n, date, type:'Purchase', pid:l.productId,
+                pnm:prod?.name||l.raw, order, sup, qty:+l.qty,
+                price:parseFloat(l.price)||'', notes, upc:prod?.upc||'' };
+      transactions.unshift(t);
+      await fsSaveTx(t);
+      n++; await new Promise(r=>setTimeout(r,5));
+    }
+    if (sup && !suppliers.some(s=>s.name.toLowerCase()===sup.toLowerCase())){
+      suppliers.push({name:sup,contact:'',phone:'',email:'',loc:'',notes:'added from receipt'});
+    }
+    scDirty=true; await saveConfig(); refreshAll();
+    toast(`✓ Posted ${n} purchases · ${order}`,false,'ok');
+    rcbReset();
+    const tb=document.querySelector('.nb[onclick*="transactions"]'); if(tb) go('transactions',tb);
+  }catch(e){ toast('Post failed: '+e.message,false,'err'); console.error(e); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='✓ Post as Purchases'; } }
+}
+
+function rcbReset(){
+  RCB.file=null; RCB.dataUrl=null; RCB.lines=[]; RCB.meta={};
+  const f=$('rcb-file'); if(f) f.value='';
+  $('rcb-filename').textContent=''; $('rcb-drop').style.borderColor='var(--b2)';
+  $('rcb-preview-wrap').style.display='none';
+  $('rcb-parse-btn').disabled=true;
+  ['rcb-sup','rcb-po','rcb-notes'].forEach(i=>sv(i,''));
+  $('rcb-step2').style.display='none'; $('rcb-loading').style.display='none';
+  $('rcb-step1').style.display='block';
+}
+
 window.addEventListener('load', () => {
   // Auth state observer handles all init after login
 });
@@ -5203,6 +5465,93 @@ window.addEventListener('load', () => {
 
     </div>
   </div>
+</div>
+
+<!-- ══ RECEIPT BOOK SCANNER ═══════════════════════════════════════ -->
+<div id="page-receipt" class="page">
+<div class="pb">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--t1);font-family:var(--font-mono);letter-spacing:.5px">🧾 RECEIPT BOOK SCANNER</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">Photograph a handwritten PO slip · AI reads it · confirm and post as Purchases</div>
+    </div>
+    <span id="rcb-key-status" style="font-size:10px;font-family:var(--font-mono)"></span>
+  </div>
+
+  <!-- STEP 1 — capture -->
+  <div id="rcb-step1">
+    <div class="card" id="rcb-drop" style="border:2px dashed var(--b2);border-radius:8px;padding:34px 20px;text-align:center;cursor:pointer;max-width:620px"
+         ondragover="rcbDragOver(event)" ondragleave="rcbDragLeave()" ondrop="rcbDrop(event)"
+         onclick="$('rcb-file').click()">
+      <div style="font-size:40px;margin-bottom:10px">🧾</div>
+      <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:6px">Add receipt photo</div>
+      <div style="font-size:11px;color:var(--t3)">Drag &amp; drop, click to browse, or use your phone camera · JPG · PNG · HEIC · PDF</div>
+      <div id="rcb-filename" style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);margin-top:10px;min-height:15px"></div>
+      <input type="file" id="rcb-file" accept="image/*,.pdf" capture="environment" style="display:none" onchange="rcbPick(event)">
+    </div>
+
+    <div id="rcb-preview-wrap" style="display:none;margin-top:14px;max-width:620px">
+      <img id="rcb-preview" style="width:100%;border:1px solid var(--b1);border-radius:8px;display:block">
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn bp" id="rcb-parse-btn" onclick="rcbParse()" style="padding:11px 26px" disabled>🤖 Read Receipt</button>
+      <button class="btn bg btn-sm" onclick="rcbReset()">✕ Clear</button>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="rcb-loading" style="display:none;text-align:center;padding:44px 20px;max-width:620px">
+    <div style="width:38px;height:38px;border:3px solid var(--bg4);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px"></div>
+    <div style="font-size:14px;font-weight:600;color:var(--t1)" id="rcb-loading-msg">Reading receipt…</div>
+    <div style="font-size:12px;color:var(--t3);margin-top:6px">Handwriting takes a moment — usually 10–20 seconds</div>
+  </div>
+
+  <!-- STEP 2 — confirm -->
+  <div id="rcb-step2" style="display:none">
+    <div class="card" style="padding:16px 18px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:12px">ORDER DETAILS</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div class="fg"><label>Supplier</label>
+          <input id="rcb-sup" list="rcb-sup-dl" placeholder="Supplier">
+          <datalist id="rcb-sup-dl"></datalist></div>
+        <div class="fg"><label>PO / Order #</label><input id="rcb-po" placeholder="PO number"></div>
+        <div class="fg"><label>Date</label><input type="date" id="rcb-date"></div>
+      </div>
+      <div class="fg" style="margin-top:10px"><label>Notes</label><input id="rcb-notes" placeholder="e.g. 1 box, tracking 8782 7726 3749"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="rcb-kpis"></div>
+
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:var(--font-mono)">LINE ITEMS READ FROM RECEIPT</div>
+        <button class="btn bg btn-sm" onclick="rcbAddRow()">+ Add Row</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>
+            <th style="padding:9px 10px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">✓</th>
+            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">AS WRITTEN</th>
+            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">MATCHED PRODUCT ID</th>
+            <th style="padding:9px 10px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">QTY</th>
+            <th style="padding:9px 10px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">UNIT PRICE</th>
+            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">MATCH</th>
+          </tr></thead>
+          <tbody id="rcb-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <button class="btn bg" onclick="rcbReset()">← Start Over</button>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span id="rcb-sel" style="font-size:11px;color:var(--t3)"></span>
+        <button class="btn bs" id="rcb-post-btn" onclick="rcbPost()" style="padding:11px 26px">✓ Post as Purchases</button>
+      </div>
+    </div>
+  </div>
+</div>
 </div>
 
 <!-- ══ EMAIL INVOICE MODAL ══════════════════════════════════════════ -->
