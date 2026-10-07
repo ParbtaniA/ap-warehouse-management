@@ -1420,6 +1420,94 @@ if (typeof pdfjsLib !== 'undefined') {
   </div>
 </div>
 
+<!-- ══ RECEIPT BOOK SCANNER ═══════════════════════════════════════ -->
+<div id="page-receipt" class="page">
+<div class="pb">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--t1);font-family:var(--font-mono);letter-spacing:.5px">🧾 RECEIPT BOOK SCANNER</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">Photograph a handwritten PO slip · AI reads it · confirm and post as Purchases</div>
+    </div>
+    <span id="rcb-key-status" style="font-size:10px;font-family:var(--font-mono)"></span>
+  </div>
+
+  <!-- STEP 1 — capture -->
+  <div id="rcb-step1">
+    <div class="card" id="rcb-drop" style="border:2px dashed var(--b2);border-radius:8px;padding:34px 20px;text-align:center;cursor:pointer;max-width:620px"
+         ondragover="rcbDragOver(event)" ondragleave="rcbDragLeave()" ondrop="rcbDrop(event)"
+         onclick="$('rcb-file').click()">
+      <div style="font-size:40px;margin-bottom:10px">🧾</div>
+      <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:6px">Add receipt photo</div>
+      <div style="font-size:11px;color:var(--t3)">Drag &amp; drop, click to browse, or use your phone camera · JPG · PNG · HEIC · PDF</div>
+      <div id="rcb-filename" style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);margin-top:10px;min-height:15px"></div>
+      <input type="file" id="rcb-file" accept="image/*,.pdf" capture="environment" style="display:none" onchange="rcbPick(event)">
+    </div>
+
+    <div id="rcb-preview-wrap" style="display:none;margin-top:14px;max-width:620px">
+      <img id="rcb-preview" style="width:100%;border:1px solid var(--b1);border-radius:8px;display:block">
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn bp" id="rcb-parse-btn" onclick="rcbParse()" style="padding:11px 26px" disabled>🤖 Read Receipt</button>
+      <button class="btn bg btn-sm" onclick="rcbReset()">✕ Clear</button>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="rcb-loading" style="display:none;text-align:center;padding:44px 20px;max-width:620px">
+    <div style="width:38px;height:38px;border:3px solid var(--bg4);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px"></div>
+    <div style="font-size:14px;font-weight:600;color:var(--t1)" id="rcb-loading-msg">Reading receipt…</div>
+    <div style="font-size:12px;color:var(--t3);margin-top:6px">Handwriting takes a moment — usually 10–20 seconds</div>
+  </div>
+
+  <!-- STEP 2 — confirm -->
+  <div id="rcb-step2" style="display:none">
+    <div class="card" style="padding:16px 18px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:12px">ORDER DETAILS</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div class="fg"><label>Supplier</label>
+          <input id="rcb-sup" list="rcb-sup-dl" placeholder="Supplier">
+          <datalist id="rcb-sup-dl"></datalist></div>
+        <div class="fg"><label>PO / Order #</label><input id="rcb-po" placeholder="PO number"></div>
+        <div class="fg"><label>Date</label><input type="date" id="rcb-date"></div>
+      </div>
+      <div class="fg" style="margin-top:10px"><label>Notes</label><input id="rcb-notes" placeholder="e.g. 1 box, tracking 8782 7726 3749"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="rcb-kpis"></div>
+
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:var(--font-mono)">LINE ITEMS READ FROM RECEIPT</div>
+        <button class="btn bg btn-sm" onclick="rcbAddRow()">+ Add Row</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>
+            <th style="padding:9px 10px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">✓</th>
+            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">AS WRITTEN</th>
+            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">MATCHED PRODUCT ID</th>
+            <th style="padding:9px 10px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">QTY</th>
+            <th style="padding:9px 10px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">UNIT PRICE</th>
+            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">MATCH</th>
+          </tr></thead>
+          <tbody id="rcb-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <button class="btn bg" onclick="rcbReset()">← Start Over</button>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span id="rcb-sel" style="font-size:11px;color:var(--t3)"></span>
+        <button class="btn bs" id="rcb-post-btn" onclick="rcbPost()" style="padding:11px 26px">✓ Post as Purchases</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+
 </div><!-- /app -->
 
 <!-- ══ CAMERA MODAL ═════════════════════════════════════════════════ -->
@@ -5465,93 +5553,6 @@ window.addEventListener('load', () => {
 
     </div>
   </div>
-</div>
-
-<!-- ══ RECEIPT BOOK SCANNER ═══════════════════════════════════════ -->
-<div id="page-receipt" class="page">
-<div class="pb">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-    <div>
-      <div style="font-size:13px;font-weight:700;color:var(--t1);font-family:var(--font-mono);letter-spacing:.5px">🧾 RECEIPT BOOK SCANNER</div>
-      <div style="font-size:11px;color:var(--t3);margin-top:2px">Photograph a handwritten PO slip · AI reads it · confirm and post as Purchases</div>
-    </div>
-    <span id="rcb-key-status" style="font-size:10px;font-family:var(--font-mono)"></span>
-  </div>
-
-  <!-- STEP 1 — capture -->
-  <div id="rcb-step1">
-    <div class="card" id="rcb-drop" style="border:2px dashed var(--b2);border-radius:8px;padding:34px 20px;text-align:center;cursor:pointer;max-width:620px"
-         ondragover="rcbDragOver(event)" ondragleave="rcbDragLeave()" ondrop="rcbDrop(event)"
-         onclick="$('rcb-file').click()">
-      <div style="font-size:40px;margin-bottom:10px">🧾</div>
-      <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:6px">Add receipt photo</div>
-      <div style="font-size:11px;color:var(--t3)">Drag &amp; drop, click to browse, or use your phone camera · JPG · PNG · HEIC · PDF</div>
-      <div id="rcb-filename" style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);margin-top:10px;min-height:15px"></div>
-      <input type="file" id="rcb-file" accept="image/*,.pdf" capture="environment" style="display:none" onchange="rcbPick(event)">
-    </div>
-
-    <div id="rcb-preview-wrap" style="display:none;margin-top:14px;max-width:620px">
-      <img id="rcb-preview" style="width:100%;border:1px solid var(--b1);border-radius:8px;display:block">
-    </div>
-
-    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button class="btn bp" id="rcb-parse-btn" onclick="rcbParse()" style="padding:11px 26px" disabled>🤖 Read Receipt</button>
-      <button class="btn bg btn-sm" onclick="rcbReset()">✕ Clear</button>
-    </div>
-  </div>
-
-  <!-- LOADING -->
-  <div id="rcb-loading" style="display:none;text-align:center;padding:44px 20px;max-width:620px">
-    <div style="width:38px;height:38px;border:3px solid var(--bg4);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px"></div>
-    <div style="font-size:14px;font-weight:600;color:var(--t1)" id="rcb-loading-msg">Reading receipt…</div>
-    <div style="font-size:12px;color:var(--t3);margin-top:6px">Handwriting takes a moment — usually 10–20 seconds</div>
-  </div>
-
-  <!-- STEP 2 — confirm -->
-  <div id="rcb-step2" style="display:none">
-    <div class="card" style="padding:16px 18px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:var(--font-mono);letter-spacing:.7px;margin-bottom:12px">ORDER DETAILS</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-        <div class="fg"><label>Supplier</label>
-          <input id="rcb-sup" list="rcb-sup-dl" placeholder="Supplier">
-          <datalist id="rcb-sup-dl"></datalist></div>
-        <div class="fg"><label>PO / Order #</label><input id="rcb-po" placeholder="PO number"></div>
-        <div class="fg"><label>Date</label><input type="date" id="rcb-date"></div>
-      </div>
-      <div class="fg" style="margin-top:10px"><label>Notes</label><input id="rcb-notes" placeholder="e.g. 1 box, tracking 8782 7726 3749"></div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="rcb-kpis"></div>
-
-    <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:var(--font-mono)">LINE ITEMS READ FROM RECEIPT</div>
-        <button class="btn bg btn-sm" onclick="rcbAddRow()">+ Add Row</button>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr>
-            <th style="padding:9px 10px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">✓</th>
-            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">AS WRITTEN</th>
-            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">MATCHED PRODUCT ID</th>
-            <th style="padding:9px 10px;text-align:center;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">QTY</th>
-            <th style="padding:9px 10px;text-align:right;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">UNIT PRICE</th>
-            <th style="padding:9px 10px;text-align:left;background:var(--bg3);color:var(--t3);font-size:10px;font-weight:700;font-family:var(--font-mono)">MATCH</th>
-          </tr></thead>
-          <tbody id="rcb-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <button class="btn bg" onclick="rcbReset()">← Start Over</button>
-      <div style="display:flex;gap:10px;align-items:center">
-        <span id="rcb-sel" style="font-size:11px;color:var(--t3)"></span>
-        <button class="btn bs" id="rcb-post-btn" onclick="rcbPost()" style="padding:11px 26px">✓ Post as Purchases</button>
-      </div>
-    </div>
-  </div>
-</div>
 </div>
 
 <!-- ══ EMAIL INVOICE MODAL ══════════════════════════════════════════ -->
