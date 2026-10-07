@@ -2170,7 +2170,16 @@ function renderDash() {
     </div>`;
   }).join('');
 
-  $('d-cats').innerHTML = categories.map(cat => {
+  // Categories holding stock float to the top — otherwise a long tail of
+  // zero-stock categories hides live inventory below the fold.
+  const _catStats = categories.map(cat => {
+    const prods = all.filter(p=>p.cat===cat);
+    let inS=0, units=0;
+    for(const p of prods){ const s=getStock(p.id).stk; if(s>0){inS++; units+=s;} }
+    return { cat, inS, units };
+  }).sort((a,b) => (b.units-a.units) || (b.inS-a.inS) || a.cat.localeCompare(b.cat));
+
+  $('d-cats').innerHTML = _catStats.map(({cat}) => {
     const prods = all.filter(p=>p.cat===cat);
     let inS2=0,low2=0,out2=0,units=0;
     for(const p of prods){
