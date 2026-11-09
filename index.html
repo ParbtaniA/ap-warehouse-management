@@ -1665,6 +1665,19 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
 
+// AI reader calls: the Netlify function only answers signed-in, allow-listed users,
+// so every request carries the current user's Firebase ID token.
+async function aiFetch(payload) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in again to use the AI reader');
+  const token = await user.getIdToken();
+  return fetch('/.netlify/functions/parse-docs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify(payload)
+  });
+}
+
 // Enable offline persistence — app still works without internet
 // Use newer cache API (avoids deprecation warning)
 try {
@@ -1810,8 +1823,9 @@ async function loadFromFirestore() {
       await saveConfig();
     }
 
-    // Load transactions — no orderBy to avoid silent failures on docs missing _ts
-    const txSnap = await FS_TX.limit(2000).get();
+    // Load ALL transactions — no orderBy (avoids silent failures on docs missing _ts) and no limit:
+    // stock is computed from this list, so a cap would silently drop the newest transactions.
+    const txSnap = await FS_TX.get();
     transactions = txSnap.docs.map(d => {
       const { _ts, _by, ...rest } = d.data();
       return rest;
@@ -1874,7 +1888,7 @@ function setupRealtimeListeners() {
   });
 
   // Transaction listener: fires when any transaction is added or removed
-  _txUnsub = FS_TX.limit(2000).onSnapshot(snap => {
+  _txUnsub = FS_TX.onSnapshot(snap => {
     if (!fsReady) return;
     // Only skip if ALL changes are still pending (not yet confirmed by server)
     const changes = snap.docChanges();
@@ -4243,13 +4257,9 @@ Prices must be numbers in USD.`;
 
     // Call via Netlify serverless proxy (avoids CORS restriction)
     // The proxy function forwards to Anthropic server-side using your API key
-    const response = await fetch('/.netlify/functions/parse-docs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system:   systemPrompt,
-        messages: [{ role: 'user', content: contentParts }]
-      })
+    const response = await aiFetch({
+      system:   systemPrompt,
+      messages: [{ role: 'user', content: contentParts }]
     });
 
     if (!response.ok) {
@@ -4732,14 +4742,13 @@ function rcvUpdateKeyStatus() {
   const el = $('rcv-key-status');
   if (!el) return;
   // Ping function with a status-check request (not forwarded to Anthropic)
-  fetch('/.netlify/functions/parse-docs', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ _ping: true })
-  }).then(r => {
+  aiFetch({ _ping: true }).then(r => {
     if (r.status === 200) {
       el.textContent = '🟢 AI parser ready';
       el.style.color = 'var(--green)';
+    } else if (r.status === 401 || r.status === 403) {
+      el.textContent = '⚠ AI parser: this account is not authorized';
+      el.style.color = 'var(--amber)';
     } else if (r.status === 500) {
       el.textContent = '⚠ API key not set in Netlify env vars';
       el.style.color = 'var(--amber)';
@@ -4812,7 +4821,7 @@ async function obDeleteFS(id) {
   return FS_OB.doc(String(id)).delete();
 }
 async function obLoadAll() {
-  const snap = await FS_OB.limit(2000).get();
+  const snap = await FS_OB.get();
   openBoxItems = snap.docs.map(d => d.data());
   openBoxItems.sort((a, b) => (b.id || 0) - (a.id || 0));
 }
@@ -5088,9 +5097,9 @@ function renderReceipt(){
 
 function rcbKeyStatus(){
   const el = $('rcb-key-status'); if(!el) return;
-  fetch('/.netlify/functions/parse-docs',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({_ping:true})})
-    .then(r=>{ el.textContent = r.status===200 ? '🟢 Reader ready' : '⚠ AI reader not configured';
+  aiFetch({_ping:true})
+    .then(r=>{ el.textContent = r.status===200 ? '🟢 Reader ready'
+               : (r.status===401||r.status===403) ? '⚠ AI reader: account not authorized' : '⚠ AI reader not configured';
                el.style.color = r.status===200 ? 'var(--green)' : 'var(--amber)'; })
     .catch(()=>{ el.textContent='⚠ Reader unreachable'; el.style.color='var(--amber)'; });
 }
@@ -5170,8 +5179,7 @@ Rules:
       { type:'text', text:'Read this purchase order slip and return the JSON.' }
     ]}]};
 
-    const resp = await fetch('/.netlify/functions/parse-docs',{method:'POST',
-      headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const resp = await aiFetch(body);
     if(!resp.ok){ const e=await resp.json().catch(()=>({})); throw new Error(e.error||('HTTP '+resp.status)); }
     const data = await resp.json();
     const txt  = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');
