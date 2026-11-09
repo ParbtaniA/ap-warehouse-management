@@ -17,7 +17,7 @@ const DEFAULT_ORIGINS = [
 ];
 // Public Firebase web API key (same value the app ships in index.html); used only to verify ID tokens.
 const DEFAULT_FIREBASE_WEB_API_KEY = 'AIzaSyCpMhFNUUTGi5CGNuZSuIsRgMCVcov8n9Y';
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_MODEL = 'claude-sonnet-5-5'; // claude-sonnet-4-20250514 was retired (API returned 404 not_found_error)
 
 const list = v => (v || '').split(',').map(s => s.trim()).filter(Boolean);
 const ALLOWED_ORIGINS = list(process.env.ALLOWED_ORIGINS).length ? list(process.env.ALLOWED_ORIGINS) : DEFAULT_ORIGINS;
